@@ -92,12 +92,16 @@ class ReadinessContract:
 
     The two managed services answer different endpoints with different timeouts, so the polling
     loop is parameterized rather than duplicated: an interface reported ready by the wrong endpoint
-    would open a browser onto a service that is still migrating its database (D-095).
+    would open a browser onto a service that is not serving yet (D-095).
+
+    `ready_body` is `None` for a service that publishes no machine-readable readiness route, which
+    makes the status the only thing that can honestly be checked. It is not a convenience: an
+    invented body would be compared against a page that any unmatched path returns (D-097).
     """
 
     url: str
     ready_status: int
-    ready_body: object
+    ready_body: object | None
     transient_statuses: tuple[int, ...]
     timeout_seconds: float
     description: str
@@ -112,6 +116,9 @@ class InterfaceRequest:
     port: int
     mode: str
     readiness: ReadinessContract
+    # The interface is launched through its own runtime, so the first argument names that runtime
+    # rather than the program; `status` would otherwise report every interface as `node` (D-097).
+    label: str
 
 
 @dataclass(slots=True)
@@ -162,9 +169,15 @@ def port_is_available(port: int) -> bool:
 
 
 def _ready(response: httpx.Response, contract: ReadinessContract) -> bool:
-    """Accept only the exact status and JSON body the service's readiness contract declares."""
+    """Accept only the exact status, and the JSON body, the readiness contract declares.
+
+    A contract without a body checks the status alone, because the service it describes has no
+    endpoint that reports anything else (D-097).
+    """
     if response.status_code != contract.ready_status:
         return False
+    if contract.ready_body is None:
+        return True
     try:
         body = response.json()
     except ValueError as error:
@@ -417,7 +430,7 @@ def _spawn_interface(
                 creationflags=_creation_flags(),
             )
         attempt.service = ServiceState(
-            label=Path(request.command[0]).stem,
+            label=request.label,
             pid=attempt.process.pid,
             create_time=_process_identity(attempt.process, INTERFACE_ROLE, attempt.log_path),
             executable=str(Path(request.command[0]).resolve()),

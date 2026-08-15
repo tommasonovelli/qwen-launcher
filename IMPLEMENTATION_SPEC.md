@@ -359,6 +359,7 @@ The identifiers stay stable because code, tests, and evidence cite them.
 
 | D-096 | On 30 July 2026 the maintainer reads the shipped `0.5.0` and makes two corrections. **Where the interface is acquired**: D-095 made `bora webui install` an explicit command so a launcher would not spend gigabytes unasked, but the step that already spends them is `bora engine install`, which downloads 22 GB of weights and is where a first setup waits. The interface therefore installs there by default, with `--no-webui` declining it exactly as `--no-model` declines the weights; neither flag removes anything already present. After a setup, `bora studio` opens a finished chat interface rather than an interface the user has yet to discover a command for. **Where it is visible and how it is removed**: `0.5.0` reached the snapshot and `doctor` but nothing in the workbench, so the Setup screen now names which interface a UI mode would open and carries the install and removal actions, and `compose_engine_install` gains the third flag. `bora webui remove` asks two separate questions in the shape D-079 established: the environment, which is reinstallable bytes and whose freed size is reported, and the interface data, which is the user's chats, notes, uploads and settings and is not backed up anywhere. Both default to no, declining the second keeps the content for a later install, removal refuses while a managed service is running, and neither removal follows a symlink out of the managed root. `bora uninstall` deletes both without a third question, because it deletes the whole data root; its preview now says so before the confirmation instead of leaving the user to infer it. No engine, model, calibration protocol, record format, command contract, reserve, or candidate is touched. |
 
+| D-097 | On 15 August 2026 the maintainer directs the managed browser interface to be DeepSeek Harness (`dsh`) instead of Open WebUI, for `studio` and `vstudio` only; `coding` keeps `services.ui` false and remains the API-first mode pi drives. This is a spike, measured on Ubuntu against npm `0.1.0-rc.6` before any code was written, and four measurements decided its shape. **Install scripts run.** A tree installed with `--ignore-scripts` does not boot at all: `node-pty` ships no linux-x64 prebuild, the harness mounts it as a boot-time plugin, and the whole plugin tree fails to load. The flag is therefore never passed, third-party install scripts do run during acquisition, and on Linux a C/C++ toolchain is required because that dependency is compiled from source. This is weaker than the rule D-094 W6 set for the interface it replaces and is accepted knowingly, because the alternative is an interface that cannot start. **No readiness route exists.** The harness serves its page from the fallback route, so `/ready`, `/health` and `/healthz` all return that page with 200 and only `/api/*` answers 404. `ReadinessContract.ready_body` therefore becomes optional and the harness contract checks the status of `GET /` alone, retrying 404; an invented body would have been compared against a page any path returns. **Nothing is written into the interface's storage.** The provider route, the default model, and the disabling of both hosted routes are all composition rows, so bora passes one overlay it owns and rewrites in its own managed root by `--patch` on every launch, and `$DSH_HOME` holds only what the user creates. D-094 W10 survives unchanged: no credential is held inside it, no database is written, and its API is never called. The key llama-server ignores is passed by environment-variable reference, so no secret reaches disk and the session key of D-095 disappears with the interface that needed it. **The launcher's flags come first.** `--patch` belongs to the launcher and `dsh web` hands everything after it to the app, so the profile is named explicitly, and the command runs the entry module through Node rather than the `.bin` shim, whose Windows form is a batch file needing a shell. Consequences recorded rather than hidden: this is an agent harness, not a chat interface, so `studio` and `vstudio` gain a workspace picker, a permission preset, and shell and filesystem tools they did not have; upstream is in developer preview and warns of compatibility-breaking changes; the pinned version is a pre-release; the resolved dependency closure is not digest-verified, exactly as D-095 accepted for its predecessor; and the harness still spends one extra completion per turn on session titles, which D-094 W5 had switched off upstream and which has no equivalent switch here. `webui_port` becomes `ui_port` and `BORA_WEBUI_PORT` becomes `BORA_UI_PORT`, taking upstream's own 3080 rather than a value moved out of the engine's way, so strict configuration reports the old key as unknown instead of silently ignoring it. Node 22.19 or newer is a new prerequisite, checked before anything is downloaded. Windows was not exercised and no measured figure here is claimed for it. No engine, model, calibration protocol, record format, reserve, or candidate is touched, and this authorizes local implementation and its commits on `spike/deepseek-harness` only — no version, tag, release, upload, remote setting, candidate activation, or Gate claim. |
 
 A new durable decision updates this table in the same step that authorizes it.
 
@@ -387,7 +388,7 @@ A new durable decision updates this table in the same step that authorizes it.
 | `tui/` (0.4) | terminal presentation, navigation, composition, and post-UI dispatch only |
 | `resources/__init__.py` | `importlib.resources` access |
 | `routing.py` (future) | pure skill normalization and scoring |
-| `webui.py` (0.5) | the managed Open WebUI: installation, environment, command, and readiness |
+| `harness.py` (0.6) | the managed DeepSeek Harness: installation, overlay, environment, command, and readiness |
 
 Only `paths.py`, `process.py`, `hardware.py`, and `engine.py` may branch on the operating system.
 
@@ -445,7 +446,7 @@ keys and malformed values are errors; the launcher does not modify the file.
 | `model` | `BORA_MODEL` | the pinned model |
 | `model_path` | `BORA_MODEL_PATH` | `None` |
 | `llama_port` | `BORA_LLAMA_PORT` | `8080` |
-| `webui_port` | `BORA_WEBUI_PORT` | `8081` |
+| `ui_port` | `BORA_UI_PORT` | `3080` |
 | `engine_path` | `BORA_ENGINE_PATH` | `None` |
 | `open_browser` | `BORA_OPEN_BROWSER` | `true` |
 
@@ -605,9 +606,12 @@ probes complete. Ubuntu CUDA uses the pinned source until the lock verifies a pr
 - stdout/stderr into the same timestamped UTF-8 log;
 - 2 s health requests, 1 s polling; each role declares its own readiness contract and its own
   timeout, the engine's being the 15 minutes of the lock;
-- READY = the exact status and JSON the role's contract declares. For the engine that is the lock;
-  for Open WebUI it is `GET /ready` with `{"status": true}`, retrying 503, and never `GET /health`,
-  which answers 200 before startup completes;
+- READY = the exact status, and the JSON where the role publishes one, that its contract declares.
+  For the engine that is the lock. DeepSeek Harness publishes no readiness route at all — its
+  single-page application answers every unmatched path, so `GET /ready` and `GET /health` both
+  return the same page — so its contract is `GET /` at 200 with no body check, retrying the 404 its
+  fallback route answers until the page owner registers (D-097). A contract without a body is the
+  honest description of such a service, never a convenience;
 - a browser is opened only once every role a mode started has reported READY;
 - stop: the interface before the engine, then terminate 10 s, then kill 5 s;
 - `Ctrl-C` cleans up both and exits 130.
@@ -844,57 +848,68 @@ Tests: normalization, accents, case, punctuation, a phrase counted once, ties, t
 co-activations, missing references, positives/negatives, hostile frontmatter, and v1/v2
 compatibility.
 
-### Backlog B — Managed Open WebUI (complete)
+### Backlog B — Managed browser interface (Open WebUI shipped; harness spike on a branch)
 
 **Objective:** an optional, upstream-owned browser interface in front of the managed engine, started
 and configured by bora and modified by it in no way.
 
-Shipped in `0.5.0`. D-094 answered the ten questions of the design record `WEBUI_PLAN.md`; D-095
-dropped the spike, the digest lock, the immutable versioned installations, and the mode-document
-interface field, and directed the rest to be built. Where that file and this document disagree, this
-document wins.
+Shipped in `0.5.0`/`0.5.1` as Open WebUI. D-094 answered the ten questions of the design record
+`WEBUI_PLAN.md`; D-095 dropped the spike, the digest lock, the immutable versioned installations, and
+the mode-document interface field, and D-096 moved acquisition into `bora engine install` and gave
+the Setup screen its actions. That is the state of `main`, and `WEBUI_PLAN.md` remains its design
+record.
 
-`bora engine install` puts `open-webui==0.11.0` into `data_dir()/open-webui/venv` with `uv`, beside
-the engine and the weights, recording the version last so an interrupted install is rebuilt rather
-than trusted; `--no-webui` declines it and `bora webui install` adds it later (D-096). With it
-installed, `studio` and `vstudio` start it as a second managed service and open it; without it they
-keep opening the integrated llama.cpp interface, which is also the fallback when the interface fails
-to start — the engine keeps serving in that case, and the mode does not exit.
+D-097 replaces the program, not the design, on `spike/deepseek-harness`. Everything below describes
+that branch; `main` still ships the interface the paragraph above names.
 
-`bora webui remove` frees the environment and asks separately about the interface data, which is
-user content, in the shape D-079 established for weights. `bora uninstall` takes both with the data
-root and says so in its preview. Neither removal follows a symlink out of the managed root.
+`bora engine install` puts `@deepseek-ai/dsh@0.1.0-rc.6` into `data_dir()/deepseek-harness/node`
+with `npm`, beside the engine and the weights, recording the version last so an interrupted install
+is rebuilt rather than trusted; `--no-ui` declines it and `bora ui install` adds it later. Node 22.19
+or newer is a prerequisite and is checked before anything is downloaded. Install scripts are run
+rather than skipped, because the harness mounts a native plugin at boot and a tree without them does
+not load at all; on Linux that dependency ships no prebuilt binary and is compiled during install.
+With it installed, `studio` and `vstudio` start it as a second managed service and open it; without
+it they keep opening the integrated llama.cpp interface, which is also the fallback when the
+interface fails to start — the engine keeps serving in that case, and the mode does not exit.
 
-bora configures it entirely through its child process environment and never calls its API: no
-session, no credential, no database write, no packaged content, no `sync`. D-080 already makes the
-engine report `model_alias_contract.alias` at `/v1/models`, so the picker names the model with no
-provisioning step. Skills, the system prompt, and web search are the user's own, added through
-upstream's own screens.
+`bora ui remove` frees the installation and asks separately about the harness home, which is user
+content, in the shape D-079 established for weights. `bora uninstall` takes both with the data root
+and says so in its preview. Neither removal follows a symlink out of the managed root.
 
-The environment is assembled in one place and shown by `doctor`: a dedicated data directory under
-`data_dir()`, the loopback host passed as an argument and never read from configuration, a generated
-session key held in the state root with owner-only permissions and printed nowhere, authentication
-disabled, environment values seeding the first boot only, no embedding model, the version check off,
-title/tags/follow-up off, Ollama off, the local OpenAI endpoint and a placeholder key. Both the
-frontmatter `pip install` and every stored function are disabled, so no third-party Python runs
-inside a bora-started process and nothing mutates the managed environment. `WEBUI_NAME` is never set
-and an inherited one is removed: the interface keeps its own name everywhere, no branding clause is
-engaged, no user-count exemption is invoked, and the upstream licence ships in
-`resources/notices/open-webui-LICENSE`.
+bora configures it entirely through the child process environment and one overlay it owns, and never
+calls its API: no session, no credential, no storage write, no packaged content. The provider route,
+the default model, and the disabling of both hosted routes are composition rows, so they travel as a
+`--patch` overlay written into bora's own managed root and rewritten on every launch; `$DSH_HOME`
+holds only what the user creates. D-080 already makes the engine report `model_alias_contract.alias`
+at `/v1/models`, so the picker names the model with no provisioning step, and `vstudio` is the only
+mode whose route declares the image modality.
 
-The account is upstream's: with authentication disabled it creates a fixed local administrator on the
-first page load, with a publicly documented password. That is one-way inside the same data directory,
-and re-enabling authentication later leaves that password in place. `docs/operations.md` states both,
-and states that the loopback rule of section 5.12 is what keeps an unauthenticated administrator
-console local.
+The environment is assembled in one place and shown by `doctor`: `$DSH_HOME` under `data_dir()`, the
+loopback host passed as an argument and never read from configuration, telemetry hard-disabled, the
+permission preset named rather than inherited, and the key llama-server ignores passed by
+environment-variable reference so no secret reaches disk. An inherited `DEEPSEEK_API_KEY` is removed,
+because the routes that would use it are disabled and a key left in the environment would quietly
+re-enable a hosted endpoint. The upstream licence ships in
+`resources/notices/deepseek-harness-LICENSE`; it is MIT, so unlike its predecessor no branding clause
+constrains how bora names the program.
 
-READY is `GET /ready`, never `GET /health`, which answers 200 before startup completes. The browser
-opens only once both roles report READY. Section 5.9 now admits one managed service per role, with an
-ordered stop that takes the interface down first.
+The harness needs no account and signs no session cookie, so the generated key of D-095 and its
+state-root file are gone. What replaces the unauthenticated-administrator caveat is a larger one:
+this is an agent harness rather than a chat interface, so `studio` and `vstudio` gain a workspace
+picker, a permission preset, and shell and filesystem tools. `docs/operations.md` states what the
+default preset does and does not confine, and states that the loopback rule of section 5.12 is what
+keeps it local.
 
-What was deliberately not built, and why, is D-095: no evidence chain, no `open-webui.lock`, no
-staged activation, no interface field in the mode document. What remains unmeasured is in the open
-work of section 0 and is claimed as a figure nowhere.
+READY is `GET /` at 200 with no body check, retrying 404, because the harness publishes no readiness
+route: its single-page application answers every unmatched path, so a body comparison would accept a
+page any path returns. The browser opens only once both roles report READY. Section 5.9 admits one
+managed service per role, with an ordered stop that takes the interface down first.
+
+What was deliberately not built, and why, is D-097: no digest-verified dependency closure, no lock
+file, no staged activation, no interface field in the mode document. Upstream is in developer preview
+and warns of compatibility-breaking changes, the pinned version is a pre-release, the extra
+completion the harness spends on session titles has no switch, and Windows was not exercised. None of
+those is claimed as resolved, and no version, tag, or release is authorized by D-097.
 
 ### Backlog C — Standalone benchmark and final doctor
 
@@ -1031,13 +1046,15 @@ remote-setting changes, and candidate activation are not authorized.
 - uv 0.11.28: <https://github.com/astral-sh/uv/releases/tag/0.11.28>
 - uv build backend: <https://docs.astral.sh/uv/concepts/build-backend/>
 - GitHub Actions security: <https://docs.github.com/en/actions/reference/security/secure-use>
-- Open WebUI environment: <https://docs.openwebui.com/reference/env-configuration/>
+- DeepSeek Harness: <https://github.com/deepseek-ai/deepseek-harness>
 
 For `llama.cpp`, the lock and evidence of the pinned release prevail, not moving links to the
-current branch. For Open WebUI there is a pinned version but no digest lock (D-095), so rule 6 of
-section 2 applies: the source read at the tag that version names outranks that documentation page,
-and a citation whose quoted code no longer matches means the reading is stale, not that the code is
-wrong.
+current branch. For DeepSeek Harness there is a pinned version but no digest lock (D-097), so rule 6
+of section 2 applies: the source and reference documents read at the version that pin names outrank
+any current page, and a citation whose quoted behavior no longer matches means the reading is stale,
+not that the code is wrong. That project is in developer preview and warns of compatibility-breaking
+changes, so every behavior this document states about it was measured on the pinned version rather
+than read from a moving page.
 
 ---
 

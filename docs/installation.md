@@ -13,11 +13,13 @@ For the default model the preflight requires at least **28 GiB of total RAM** an
 available**. You also need roughly 22.7 GB for the GGUF, roughly 0.9 GB for the vision projector,
 and extra space for the engine, the download cache, and logs.
 
-`bora engine install` also installs the Open WebUI browser interface. Its dependency closure pins
-torch, so it is large: one Ubuntu x86-64 machine resolved it to **6.4 GB**, on top of the above.
-Treat that as an order of magnitude rather than a promise — the closure differs by platform and was
-measured once. Pass `--no-webui` to skip it, in which case `studio` and `vstudio` keep using the
-integrated llama.cpp interface and `bora webui install` can add it later.
+`bora engine install` also installs the DeepSeek Harness browser interface. One Ubuntu x86-64
+machine resolved it to **360 MB** over 532 packages, on top of the above. Treat that as an order of
+magnitude rather than a promise — the closure differs by platform and was measured once. It needs
+**Node.js 22.19 or newer** on `PATH`, which is checked before anything is downloaded, and on Linux a
+C/C++ toolchain, because one dependency ships no prebuilt binary there and is compiled during the
+install. Pass `--no-ui` to skip it, in which case `studio` and `vstudio` keep using the integrated
+llama.cpp interface and `bora ui install` can add it later.
 
 CUDA on a machine with more than one GPU is detected, but startup is blocked: physical isolation has
 only been verified on single-GPU hosts. If `nvidia-smi` is missing, fails, or produces unreadable
@@ -197,15 +199,19 @@ bora studio    # text chat in a browser UI
 bora vstudio   # the same UI, with image input
 ```
 
-`studio` and `vstudio` open Open WebUI, which `bora engine install` put in place, as a second managed
-service. The browser opens once the engine and the interface have each reported ready. The model
-appears in its picker as `Qwen 3.6`, which is simply the alias the engine reports; bora writes
-nothing into Open WebUI. Skills, a system prompt, and web search are yours to add through its own
-screens.
+`studio` and `vstudio` open DeepSeek Harness, which `bora engine install` put in place, as a second
+managed service. The browser opens once the engine and the interface have each reported ready. The
+model appears in its picker as `Qwen 3.6`, which is simply the alias the engine reports; bora writes
+nothing into the harness's own storage.
 
-If you installed with `--no-webui`, both modes open the integrated llama.cpp interface instead.
-`bora webui install` adds Open WebUI later, and `bora webui remove` takes it back out — asking about
-the environment and about your own chats as two separate questions.
+The harness is an agent, not a plain chat window: a session runs against a workspace you pick, under
+a permission preset shown in the composer, and it can read and edit files there and run commands.
+The default preset confines writes to the selected workspace and the temporary directories; reads,
+network access, and process visibility are not confined. Choose the workspace deliberately.
+
+If you installed with `--no-ui`, both modes open the integrated llama.cpp interface instead.
+`bora ui install` adds the harness later, and `bora ui remove` takes it back out — asking about the
+installation and about your own sessions as two separate questions.
 
 The processes stay in the foreground. `Ctrl-C` performs the cleanup and exits with code 130. From
 another terminal you can use:

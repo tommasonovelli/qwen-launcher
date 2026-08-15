@@ -38,7 +38,7 @@ def test_config_details_report_default_sources(tmp_path) -> None:
         "model",
         "model_path",
         "llama_port",
-        "webui_port",
+        "ui_port",
         "engine_path",
         "open_browser",
     }
@@ -167,17 +167,17 @@ def test_malformed_toml_has_actionable_error(tmp_path):
         load_config(write_config(tmp_path, 'model = "unterminated\n'), environ={})
 
 
-def test_webui_port_defaults_beside_the_engine_port() -> None:
+def test_ui_port_defaults_beside_the_engine_port() -> None:
     """Keep upstream's own 8080 default off the interface, because that is the engine's port."""
     config = load_config(Path("missing.toml"), environ={})
 
     assert config.llama_port == 8080
-    assert config.webui_port == 8081
+    assert config.ui_port == 3080
 
 
 def test_the_two_managed_ports_may_never_be_equal(tmp_path) -> None:
     """Refuse the collision while resolving configuration, before either process starts."""
-    path = write_config(tmp_path, "webui_port = 8080\n")
+    path = write_config(tmp_path, "ui_port = 8080\n")
 
     with pytest.raises(ConfigError, match="must differ"):
         load_config(path, environ={})
@@ -185,23 +185,23 @@ def test_the_two_managed_ports_may_never_be_equal(tmp_path) -> None:
 
 def test_an_environment_override_cannot_reintroduce_the_collision(tmp_path) -> None:
     """Apply the same rule to the layer that wins, not only to the file it overrides."""
-    path = write_config(tmp_path, "webui_port = 9001\n")
+    path = write_config(tmp_path, "ui_port = 9001\n")
 
     with pytest.raises(ConfigError, match="must differ"):
-        load_config(path, environ={"BORA_WEBUI_PORT": "8080"})
+        load_config(path, environ={"BORA_UI_PORT": "8080"})
 
 
 def test_the_interface_port_is_overridable_from_both_layers(tmp_path) -> None:
     """Let the interface move when 8081 is taken, with the usual environment precedence."""
-    path = write_config(tmp_path, "webui_port = 9001\n")
+    path = write_config(tmp_path, "ui_port = 9001\n")
 
-    assert load_config(path, environ={}).webui_port == 9001
-    assert load_config(path, environ={"BORA_WEBUI_PORT": "9002"}).webui_port == 9002
+    assert load_config(path, environ={}).ui_port == 9001
+    assert load_config(path, environ={"BORA_UI_PORT": "9002"}).ui_port == 9002
 
 
 def test_an_invalid_interface_port_names_its_own_key(tmp_path) -> None:
     """Report the key the user actually got wrong instead of the other port's name."""
-    path = write_config(tmp_path, "webui_port = 70000\n")
+    path = write_config(tmp_path, "ui_port = 70000\n")
 
-    with pytest.raises(ConfigError, match="'webui_port'"):
+    with pytest.raises(ConfigError, match="'ui_port'"):
         load_config(path, environ={})

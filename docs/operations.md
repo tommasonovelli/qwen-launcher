@@ -171,12 +171,12 @@ The whole file is validated before the environment overrides. Fix the file print
 only keys are:
 
 ```text
-model, model_path, llama_port, webui_port, engine_path, open_browser
+model, model_path, llama_port, ui_port, engine_path, open_browser
 ```
 
 Strings such as `open_browser = "false"` are not TOML booleans. Use `open_browser = false`.
 
-`llama_port` and `webui_port` must differ. Setting both to the same number is refused while the
+`llama_port` and `ui_port` must differ. Setting both to the same number is refused while the
 configuration is resolved, naming the value they collided on.
 
 ### An environment variable seems to override the file, but the command still fails
@@ -318,7 +318,7 @@ temporary port automatically; ordinary launches stay strict about the configured
 ### A second startup is refused
 
 One managed service per role is allowed: one engine, and one interface in front of it. A second
-engine, or a second Open WebUI, is refused by name. A `start.lock` with a live owner blocks the
+engine, or a second harness, is refused by name. A `start.lock` with a live owner blocks the
 second command; a lock that is definitely stale is removed and acquired exactly once. Use `status`,
 which now shows the role of each live service, and `stop`, which takes the interface down before the
 engine.
@@ -326,9 +326,9 @@ engine.
 ### Loading times out
 
 The engine's total timeout is 15 minutes. Check the log for OOM, the wrong model, missing libraries,
-or extreme slowness. Open WebUI has its own, longer allowance, because its first start creates the
-database and applies every migration. Do not widen either timeout or change an endpoint without
-changing and verifying the contract.
+or extreme slowness. The harness has its own, shorter allowance, because it initializes its profile
+rather than a database; a first boot was measured at about one second. Do not widen either timeout or
+change an endpoint without changing and verifying the contract.
 
 ### Incompatible health check
 
@@ -336,77 +336,80 @@ For the engine, READY requires exactly HTTP 200 with `{"status":"ok"}`. A differ
 an incompatible engine or service on the port. Check `engine_path`, the `PATH`, `engine status`, and
 the process that is listening.
 
-For Open WebUI, READY is `GET /ready`, never `GET /health`. The liveness endpoint answers 200
-unconditionally, before startup has finished, so a launcher that polled it would report ready while
-the first-boot migration was still running.
+For the harness, READY is `GET /` at 200, with no body check, retrying 404. It publishes no health
+or readiness route at all: its single-page application answers every unmatched path, so `/ready` and
+`/health` return that same page and a launcher that trusted a body there would accept a server that
+is not serving. The 404 is the real transient state — the page route is unclaimed until the plugin
+tree finishes booting.
 
 ### The browser does not open
 
 The UI may already be ready. Copy the URL printed by the CLI. Check `open_browser=true`; a browser
-failure does not terminate the server. Note that with Open WebUI installed the browser waits for
+failure does not terminate the server. Note that with the harness installed the browser waits for
 **both** services, so an interface that is slow to start delays the tab; the CLI prints both URLs
 before it opens anything.
 
-## Open WebUI
+## DeepSeek Harness
 
 ### Which interface opened
 
-`studio` and `vstudio` print the interface by name. Open WebUI opens when `bora webui install` has
-been run; otherwise the integrated llama.cpp interface does. `bora webui status` and `bora doctor`
-both report which of the two is in place.
+`studio` and `vstudio` print the interface by name. The harness opens when `bora ui install` has been
+run; otherwise the integrated llama.cpp interface does. `bora ui status` and `bora doctor` both
+report which of the two is in place.
 
-### Open WebUI did not start
+### The harness did not start
 
 The engine keeps serving and the integrated interface opens instead, with the reason and the
-interface log printed. Common causes are a port already in use — check `webui_port` — and an
-installation left incomplete by an interrupted download, which `bora webui install` rebuilds.
+interface log printed. Common causes are a port already in use — check `ui_port` — an absent or too
+old Node.js, and an installation left incomplete by an interrupted download, which `bora ui install`
+rebuilds.
 
-### The account, and why there is no password
+### It is an agent, and what that means for your files
 
-Authentication is disabled, so on the first page load Open WebUI creates its own local account,
-`admin@localhost` with the password `admin`, and makes it an administrator. bora does not create,
-store, or reset that account.
+The harness is not a chat window. A session runs against a workspace you pick, under a permission
+preset the composer shows, and it can read and edit files there and run commands.
 
 Two consequences are worth stating plainly:
 
-- it is **one-way inside the same data directory**. Once a user exists, that directory cannot be
-  switched between authenticated and unauthenticated use; the honest remedy for "I want real
-  accounts" is a fresh data directory, not a migration. Re-enabling authentication later leaves that
-  known password in place;
-- what keeps an unauthenticated administrator console safe is the loopback rule. Both managed
-  services bind `127.0.0.1` only, and that address is a constant in the code rather than a setting.
-  The inference endpoint beside it has no authentication either. Do not put either port on a network
-  interface or behind a tunnel.
+- the default preset confines **writes** — shell and filesystem mutations — to the selected
+  workspace and the platform temporary directories. **Reads, network access, and process visibility
+  are not confined.** Choose the workspace deliberately, and read what a session proposes before
+  approving it;
+- what keeps it local is the loopback rule. Both managed services bind `127.0.0.1` only, and that
+  address is a constant in the code rather than a setting. There is no authentication, no TLS, and
+  no origin policy in front of it, and the inference endpoint beside it has no authentication
+  either. Do not put either port on a network interface or behind a tunnel.
 
-### Imported tools and functions do not run
+### Nothing here reaches the network
 
-Open WebUI can store Python "functions" and run them inside its own process, installing their
-declared requirements with `pip` at every startup. Both of those are switched off in a
-bora-started instance: no third-party Python executes inside it, and nothing mutates the managed
-environment behind your back. Skills, prompts, and system prompts are unaffected — they are data,
-not code, and they work normally.
+The hosted DeepSeek model route and its web search are both disabled by bora's launch overlay, rather
+than merely left without a key, and an inherited `DEEPSEEK_API_KEY` is removed from the child
+environment so it cannot quietly re-enable one. Telemetry is hard-disabled by the switch upstream
+documents as authoritative. The only route configured is the managed llama-server on loopback.
 
-### Titles, tags, follow-ups, and retrieval are off
+### Session titles cost an extra completion
 
-Chat-title, tag, and follow-up generation each issue an extra completion per turn against the same
-single engine, serialized behind the stream you are waiting on, so all three are off. No embedding
-model is configured either, so nothing is downloaded on a first start; web search and retrieval are
-yours to enable if you want them.
+The harness generates a session title with a second completion per turn, against the same single
+engine and serialized behind the stream you are waiting on. Upstream exposes no switch for it, so
+unlike the interface it replaces this cost is present and is not something bora can turn off.
 
-These are seeded on the first boot only. From the second boot onward every setting in the interface
-belongs to you, and bora does not re-impose it.
+### What bora configures, and what is yours
+
+bora passes one launch overlay it owns, rewritten on every start, holding the provider route, the
+default model, and the two disabled routes. Everything else in `$DSH_HOME` — your sessions,
+workspaces and settings — is yours, and bora neither reads nor rewrites it.
 
 ### Removing it
 
-`bora webui remove` asks two separate questions: the environment, which is the several gigabytes bora
-installed and can reinstall, and the interface data, which is your chats, notes, uploads and
-settings. Both default to no. Declining the second leaves your content where it is, so a later
-`bora webui install` finds it again. Removal refuses while a managed service is running.
+`bora ui remove` asks two separate questions: the installation, which is the megabytes bora fetched
+and can fetch again, and the harness home, which is your sessions, workspaces and settings. Both
+default to no. Declining the second leaves your content where it is, so a later `bora ui install`
+finds it again. Removal refuses while a managed service is running.
 
 `bora uninstall` deletes both without asking separately, because it deletes the whole data root; its
-preview says so before the confirmation. The session key lives in the state root and goes with it.
+preview says so before the confirmation.
 
-To reclaim the space but keep using bora, use `bora webui remove` and answer no to the second
+To reclaim the space but keep using bora, use `bora ui remove` and answer no to the second
 question.
 
 ### Corrupt state

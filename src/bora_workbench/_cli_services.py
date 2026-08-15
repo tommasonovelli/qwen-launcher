@@ -44,6 +44,20 @@ from bora_workbench.engine import (
     resolve_model,
 )
 from bora_workbench.hardware import HardwareError, detect_hardware, ensure_launch_supported
+from bora_workbench.harness import (
+    LOOPBACK_HOST,
+    HarnessError,
+    HarnessLaunch,
+    HarnessStatus,
+    inspect_harness,
+    interface_data_dir,
+    launch_environment,
+    readiness_contract,
+    require_node,
+    serve_command,
+    write_overlay,
+)
+from bora_workbench.models import display_name
 from bora_workbench.process import (
     InterfaceRequest,
     ProcessError,
@@ -75,18 +89,6 @@ from bora_workbench.uninstall import (
     remove_managed_roots,
     schedule_tool_removal,
 )
-from bora_workbench.webui import (
-    LOOPBACK_HOST,
-    WebuiError,
-    WebuiLaunch,
-    WebuiStatus,
-    inspect_webui,
-    interface_data_dir,
-    launch_environment,
-    readiness_contract,
-    resolve_secret_key,
-    serve_command,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,7 +106,9 @@ class PreparedMode:
     @property
     def interface_name(self) -> str:
         """Name the program whose page is about to open, before it opens."""
-        return "Open WebUI" if self.interface is not None else "the integrated llama.cpp interface"
+        if self.interface is None:
+            return "the integrated llama.cpp interface"
+        return "DeepSeek Harness"
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,42 +132,48 @@ def _mode_urls(plan: LaunchPlan, lock: JsonObject) -> tuple[str, str | None]:
     return api_url, f"{base}{ui_path}"
 
 
-def _webui_launch(config: Config, status: WebuiStatus) -> WebuiLaunch:
-    """Resolve everything the interface process needs, including its stable session key."""
-    assert status.executable is not None
-    return WebuiLaunch(
-        status.executable,
-        config.webui_port,
-        config.llama_port,
+def _harness_launch(started: _StartedMode, status: HarnessStatus) -> HarnessLaunch:
+    """Resolve everything the interface process needs, including the model it will name."""
+    assert status.script is not None
+    return HarnessLaunch(
+        status.script,
+        started.config.ui_port,
+        started.config.llama_port,
         interface_data_dir(status.root),
-        resolve_secret_key(),
+        started.model_alias,
+        started.plan.mode.services.vision,
     )
 
 
-def _start_managed_interface(config: Config, mode_id: str) -> tuple[RunningService | None, str]:
-    """Start Open WebUI when it is installed, or explain which interface is used instead.
+def _start_managed_interface(started: _StartedMode) -> tuple[RunningService | None, str]:
+    """Start the harness when it is installed, or explain which interface is used instead.
 
     A failure here never takes the engine down with it: the model is already serving, and the
     integrated llama.cpp interface is the reduced fallback the mode can still open (D-095).
     """
-    status = inspect_webui()
+    status = inspect_harness()
     if not status.is_installed:
         return None, (
-            "Open WebUI is not installed, so the integrated llama.cpp interface opens instead. "
-            "Run `bora webui install` to use Open WebUI."
+            "DeepSeek Harness is not installed, so the integrated llama.cpp interface opens "
+            "instead. Run `bora ui install` to use DeepSeek Harness."
         )
     try:
-        launch = _webui_launch(config, status)
+        node = require_node()
+        launch = _harness_launch(started, status)
+        overlay = write_overlay(launch, status.root)
         request = InterfaceRequest(
-            serve_command(launch),
+            serve_command(launch, node, overlay),
             launch_environment(launch),
             launch.port,
-            mode_id,
+            started.plan.mode.id,
             readiness_contract(launch.port),
+            "dsh",
         )
         return start_interface(request), ""
-    except (ProcessError, WebuiError) as error:
-        return None, f"Open WebUI did not start: {error}. The integrated interface opens instead."
+    except (ProcessError, HarnessError) as error:
+        return None, (
+            f"DeepSeek Harness did not start: {error}. The integrated interface opens instead."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +185,9 @@ class _StartedMode:
     running: RunningService
     api_url: str
     integrated_url: str | None
+    # The alias `/v1/models` already reports, so the interface names the model without anything
+    # being provisioned into it (D-080).
+    model_alias: str
 
 
 def _prepared(started: _StartedMode) -> PreparedMode:
@@ -187,10 +200,10 @@ def _prepared(started: _StartedMode) -> PreparedMode:
     config, plan = started.config, started.plan
     if started.integrated_url is None:
         return PreparedMode(started.running, plan, started.api_url, None, config.open_browser)
-    interface, note = _start_managed_interface(config, plan.mode.id)
+    interface, note = _start_managed_interface(started)
     ui_url = started.integrated_url
     if interface is not None:
-        ui_url = f"http://{LOOPBACK_HOST}:{config.webui_port}"
+        ui_url = f"http://{LOOPBACK_HOST}:{config.ui_port}"
     return PreparedMode(
         started.running,
         plan,
@@ -223,7 +236,8 @@ def _prepare_mode(mode_id: str, force: bool, stderr: Console) -> PreparedMode:
         command = build_command(executable, plan, lock)
         api_url, integrated_url = _mode_urls(plan, lock)
         running = start_service(StartRequest(command, plan, lock))
-        return _prepared(_StartedMode(config, plan, running, api_url, integrated_url))
+        started = _StartedMode(config, plan, running, api_url, integrated_url, display_name(lock))
+        return _prepared(started)
     except ConfigError as error:
         print_error(stderr, "Configuration error", str(error))
         raise typer.Exit(code=2) from error
@@ -244,7 +258,7 @@ def _show_ready(session: PreparedMode, stdout: Console) -> None:
         stdout.print(f"Interface: {session.interface_name}.")
     print_note(stdout, "Log", str(session.running.state.log_path))
     if session.interface is not None:
-        print_note(stdout, "Open WebUI log", str(session.interface.state.log_path))
+        print_note(stdout, "Interface log", str(session.interface.state.log_path))
     for note in session.notes:
         print_note(stdout, "Interface", note)
     for warning in (*session.running.warnings, *plan.warnings):
@@ -283,7 +297,7 @@ def _release_interface(session: PreparedMode, stdout: Console) -> None:
     try:
         stop_interface(session.interface)
     except (OSError, ProcessError) as error:
-        print_warning(stdout, f"Could not stop Open WebUI: {error}")
+        print_warning(stdout, f"Could not stop DeepSeek Harness: {error}")
 
 
 def _run_mode(mode_id: str, force: bool, output: ServiceOutput) -> None:
@@ -303,7 +317,7 @@ def run_coding(force: bool, stdout: Console, stderr: Console) -> None:
 
 
 def run_studio(force: bool, stdout: Console, stderr: Console) -> None:
-    """Run text studio mode, opening Open WebUI when it is installed, after both are ready."""
+    """Run text studio mode, opening the harness when installed, after both are ready."""
     _run_mode("studio", force, ServiceOutput(stdout, stderr))
 
 
@@ -391,9 +405,9 @@ def _show_preview(
     tool_state = "will be removed with uv" if installation.is_managed_by_uv else "not uv-managed"
     stdout.print(f"  Python tool: {installation.environment} ({tool_state})", markup=False)
     stdout.print("The data root contains the model store, so its weights are deleted with it.")
-    stdout.print("It also contains the managed Open WebUI, so its environment and your own chats,")
-    stdout.print("notes and uploads go with it. `bora webui remove` deletes only that, and asks")
-    stdout.print("about the environment and your content as two separate questions.")
+    stdout.print("It also contains the managed DeepSeek Harness, so its installation and your own")
+    stdout.print("sessions go with it. `bora ui remove` deletes only that, and asks about the")
+    stdout.print("installation and your content as two separate questions.")
     stdout.print("uv itself is never touched. Weights in the Hugging Face cache are asked about")
     stdout.print("separately, after this step.")
 

@@ -29,14 +29,14 @@ def cpu_hardware() -> HardwareInfo:
 def patch_preflight(monkeypatch, is_browser_enabled: bool = False) -> list[bool]:
     """Replace external preflight operations while retaining real mode and plan fusion.
 
-    Open WebUI is reported absent unless a test asks for it with `patch_webui`. Without this the
+    The harness is reported absent unless a test asks for it with `patch_harness`. Without this the
     result would depend on whether the developer running the suite happens to have installed it,
     and a UI mode would try to start a real interface against the real state root.
     """
     requested_vision: list[bool] = []
     monkeypatch.setattr(service_cli, "load_config", lambda: Config(open_browser=is_browser_enabled))
     monkeypatch.setattr(service_cli, "detect_hardware", cpu_hardware)
-    patch_webui(monkeypatch, installed=False)
+    patch_harness(monkeypatch, installed=False)
 
     def resolve(config, lock, request):
         """Record projector demand and return matching synthetic local artifacts."""
@@ -87,7 +87,7 @@ def ready_session(
         warnings=("fallback warning",),
     )
     running = SimpleNamespace(state=SimpleNamespace(log_path="server.log"), warnings=())
-    ui_url = "http://127.0.0.1:8080/" if interface is None else "http://127.0.0.1:8081"
+    ui_url = "http://127.0.0.1:8080/" if interface is None else "http://127.0.0.1:3080"
     return service_cli.PreparedMode(
         running,  # type: ignore[arg-type]
         plan,  # type: ignore[arg-type]
@@ -132,16 +132,19 @@ def test_browser_disabled_never_attempts_to_open(monkeypatch) -> None:
     open_browser.assert_not_called()
 
 
-def patch_webui(monkeypatch, *, installed: bool, failure: Exception | None = None) -> list[str]:
-    """Replace the whole Open WebUI layer with recorders that start no process at all."""
+def patch_harness(monkeypatch, *, installed: bool, failure: Exception | None = None) -> list[str]:
+    """Replace the whole harness layer with recorders that start no process at all."""
     events: list[str] = []
     status = SimpleNamespace(
-        is_installed=installed, root=Path("/managed/open-webui"), executable=Path("open-webui")
+        is_installed=installed,
+        root=Path("/managed/deepseek-harness"),
+        script=Path("/managed/deepseek-harness/node/bin.js"),
     )
-    monkeypatch.setattr(service_cli, "inspect_webui", lambda: status)
-    monkeypatch.setattr(service_cli, "resolve_secret_key", lambda: "test-key")
+    monkeypatch.setattr(service_cli, "inspect_harness", lambda: status)
+    monkeypatch.setattr(service_cli, "require_node", lambda: "/usr/bin/node")
+    monkeypatch.setattr(service_cli, "write_overlay", lambda launch, root: root / "bora.patch.yml")
     monkeypatch.setattr(service_cli, "launch_environment", lambda launch: {})
-    interface = SimpleNamespace(state=SimpleNamespace(log_path="webui.log"), warnings=())
+    interface = SimpleNamespace(state=SimpleNamespace(log_path="dsh.log"), warnings=())
 
     def start(request):
         """Record the interface start, or fail it the way a real startup failure would."""
@@ -156,10 +159,10 @@ def patch_webui(monkeypatch, *, installed: bool, failure: Exception | None = Non
     return events
 
 
-def test_open_webui_becomes_the_interface_when_it_is_installed(monkeypatch) -> None:
+def test_the_harness_becomes_the_interface_when_it_is_installed(monkeypatch) -> None:
     """Open the managed interface on its own port once studio finds it installed."""
     patch_preflight(monkeypatch, is_browser_enabled=True)
-    patch_webui(monkeypatch, installed=True)
+    patch_harness(monkeypatch, installed=True)
     monkeypatch.setattr(service_cli, "wait_foreground", lambda running: None)
     open_browser = Mock(return_value=True)
     monkeypatch.setattr(service_cli.webbrowser, "open", open_browser)
@@ -167,14 +170,14 @@ def test_open_webui_becomes_the_interface_when_it_is_installed(monkeypatch) -> N
     result = runner.invoke(app, ["studio", "--force"])
 
     assert result.exit_code == 0
-    assert "Interface: Open WebUI." in result.stdout
-    open_browser.assert_called_once_with("http://127.0.0.1:8081", new=2)
+    assert "Interface: DeepSeek Harness." in result.stdout
+    open_browser.assert_called_once_with("http://127.0.0.1:3080", new=2)
 
 
 def test_the_browser_opens_only_after_both_services_report_ready(monkeypatch) -> None:
     """Open one tab only once the engine and the interface have each answered their own check."""
     patch_preflight(monkeypatch, is_browser_enabled=True)
-    events = patch_webui(monkeypatch, installed=True)
+    events = patch_harness(monkeypatch, installed=True)
     monkeypatch.setattr(service_cli, "wait_foreground", lambda running: None)
 
     def start_engine(request):
@@ -194,10 +197,10 @@ def test_the_browser_opens_only_after_both_services_report_ready(monkeypatch) ->
     assert events[:3] == ["engine-ready", "interface-ready", "browser"]
 
 
-def test_an_absent_open_webui_falls_back_to_the_integrated_interface(monkeypatch) -> None:
+def test_an_absent_harness_falls_back_to_the_integrated_interface(monkeypatch) -> None:
     """Keep studio working on a machine that never spent the disk, and say which UI opened."""
     patch_preflight(monkeypatch, is_browser_enabled=True)
-    patch_webui(monkeypatch, installed=False)
+    patch_harness(monkeypatch, installed=False)
     monkeypatch.setattr(service_cli, "wait_foreground", lambda running: None)
     open_browser = Mock(return_value=True)
     monkeypatch.setattr(service_cli.webbrowser, "open", open_browser)
@@ -205,8 +208,8 @@ def test_an_absent_open_webui_falls_back_to_the_integrated_interface(monkeypatch
     result = runner.invoke(app, ["studio", "--force"])
 
     assert result.exit_code == 0
-    assert "Open WebUI is not installed" in result.stdout
-    assert "bora webui install" in result.stdout
+    assert "DeepSeek Harness is not installed" in result.stdout
+    assert "bora ui install" in result.stdout
     assert "Interface: the integrated llama.cpp interface." in result.stdout
     open_browser.assert_called_once_with("http://127.0.0.1:8080/", new=2)
 
@@ -214,21 +217,21 @@ def test_an_absent_open_webui_falls_back_to_the_integrated_interface(monkeypatch
 def test_a_failed_interface_keeps_the_model_serving(monkeypatch) -> None:
     """Never take the engine down with the interface: the reduced fallback is still a UI."""
     patch_preflight(monkeypatch, is_browser_enabled=False)
-    patch_webui(monkeypatch, installed=True, failure=ProcessError("exited; inspect webui.log"))
+    patch_harness(monkeypatch, installed=True, failure=ProcessError("exited; inspect dsh.log"))
     monkeypatch.setattr(service_cli, "wait_foreground", lambda running: None)
 
     result = runner.invoke(app, ["studio", "--force"])
 
     assert result.exit_code == 0
-    assert "Open WebUI did not start" in result.stdout
-    assert "inspect webui.log" in result.stdout
+    assert "DeepSeek Harness did not start" in result.stdout
+    assert "inspect dsh.log" in result.stdout
     assert "UI: http://127.0.0.1:8080/" in result.stdout
 
 
 def test_the_interface_is_released_when_the_mode_exits(monkeypatch) -> None:
     """Take the interface down on the way out, including after a Ctrl-C in the foreground."""
     patch_preflight(monkeypatch, is_browser_enabled=False)
-    events = patch_webui(monkeypatch, installed=True)
+    events = patch_harness(monkeypatch, installed=True)
 
     def interrupt(running):
         """Fail the foreground wait the way Ctrl-C does."""
@@ -246,7 +249,7 @@ def test_the_interface_is_released_when_the_mode_exits(monkeypatch) -> None:
 def test_coding_never_starts_an_interface(monkeypatch) -> None:
     """Leave the API-first mode exactly as it was: no second process, no browser, no port."""
     patch_preflight(monkeypatch, is_browser_enabled=True)
-    events = patch_webui(monkeypatch, installed=True)
+    events = patch_harness(monkeypatch, installed=True)
     monkeypatch.setattr(service_cli, "wait_foreground", lambda running: None)
     monkeypatch.setattr(
         service_cli.webbrowser, "open", Mock(side_effect=AssertionError("coding opens no browser"))
@@ -259,9 +262,9 @@ def test_coding_never_starts_an_interface(monkeypatch) -> None:
 
 
 def test_the_preflight_helper_never_consults_the_host_installation(monkeypatch) -> None:
-    """Keep every mode test independent of whether this machine has Open WebUI installed.
+    """Keep every mode test independent of whether this machine has the harness installed.
 
-    Without this the result would flip on a developer who ran `bora webui install`, and a UI mode
+    Without this the result would flip on a developer who ran `bora ui install`, and a UI mode
     under test would start a real interface and register it in the real state root.
     """
     patch_preflight(monkeypatch)

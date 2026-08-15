@@ -112,13 +112,13 @@ def models_dir() -> Path:
     return data_dir() / "models"
 
 
-def webui_dir() -> Path:
-    """Return the managed Open WebUI root without creating it.
+def harness_dir() -> Path:
+    """Return the managed DeepSeek Harness root without creating it.
 
-    It sits under the data root so the environment, its database and its uploads are deleted by
-    `uninstall` along with every other managed root (specification section 5.10, D-095).
+    It sits under the data root so the installation, the harness home and its sessions are deleted
+    by `uninstall` along with every other managed root (specification section 5.10, D-097).
     """
-    return data_dir() / "open-webui"
+    return data_dir() / "deepseek-harness"
 
 
 def venv_executable(environment: Path, name: str) -> Path:
@@ -131,6 +131,16 @@ def venv_executable(environment: Path, name: str) -> Path:
     if _system_name() == "windows":
         return environment / "Scripts" / f"{name}.exe"
     return environment / "bin" / name
+
+
+def node_package_script(environment: Path, package: str, script: str) -> Path:
+    """Return one module file inside an npm prefix, without consulting the `.bin` shims.
+
+    The shims are a POSIX symlink and a Windows `.cmd` batch file, and only the batch file needs a
+    shell to run. Resolving the module itself keeps one argv for both platforms and keeps the
+    launch shell-free, which specification section 5.12 requires of every managed process.
+    """
+    return environment / "node_modules" / Path(package) / script
 
 
 def hf_hub_dir(environ: Mapping[str, str] | None = None) -> Path | None:

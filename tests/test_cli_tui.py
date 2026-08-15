@@ -22,6 +22,7 @@ from bora_workbench.cli import app
 from bora_workbench.config import Config, ConfigResolution, ConfigSources
 from bora_workbench.engine import EngineStatus
 from bora_workbench.hardware import HardwareInfo
+from bora_workbench.harness import HarnessStatus
 from bora_workbench.models import ModelInspection
 from bora_workbench.pi_link import ContextWindow, PiInstallation
 from bora_workbench.snapshot import (
@@ -50,7 +51,6 @@ from bora_workbench.tui.screens.settings import SettingsView
 from bora_workbench.tui.screens.setup import SetupView
 from bora_workbench.tui.terminal import TerminalMode
 from bora_workbench.validation import ValidationResult
-from bora_workbench.webui import WebuiStatus
 
 runner = CliRunner()
 # One non-colour fact per section, in the order of the central menu.
@@ -80,7 +80,7 @@ def _doctor() -> DoctorSnapshot:
     )
     paths = PublicPaths(Path("config"), Path("data"), Path("cache"), Path("state"))
     engine = EngineStatus(False, None, None, None, False, ("not installed",))
-    interface = WebuiStatus(Path("open-webui"), None, None)
+    interface = HarnessStatus(Path("deepseek-harness"), None, None)
     return DoctorSnapshot(
         "0.test", config, hardware, ValidationResult(()), 1, (record,), engine, paths, {}, interface
     )

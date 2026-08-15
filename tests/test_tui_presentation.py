@@ -13,11 +13,11 @@ from typer.testing import CliRunner
 import bora_workbench.cli as cli_module
 import bora_workbench.tui.terminal as terminal_module
 from bora_workbench.cli import app
+from bora_workbench.harness import DSH_VERSION, HarnessStatus
 from bora_workbench.tui.app import WorkbenchApp
 from bora_workbench.tui.screens.modes import ModesView
 from bora_workbench.tui.screens.setup import render_setup
 from bora_workbench.tui.terminal import TerminalMode
-from bora_workbench.webui import OPEN_WEBUI_VERSION, WebuiStatus
 from tests.test_cli_tui import _snapshot
 
 runner = CliRunner()
@@ -98,15 +98,15 @@ def test_wide_sections_use_blue_white_hierarchy_and_more_width_than_home() -> No
     ("version", "expected"),
     [
         (None, "opens         the integrated llama.cpp interface"),
-        (OPEN_WEBUI_VERSION, "opens         Open WebUI, started beside the engine"),
+        (DSH_VERSION, "opens         DeepSeek Harness, started beside the engine"),
     ],
 )
 def test_setup_names_which_interface_a_ui_mode_would_open(version, expected) -> None:
     """Answer on the Setup screen the question `studio` used to answer only once it had started."""
     snapshot = _snapshot()
-    executable = Path("open-webui") if version else None
-    interface = WebuiStatus(Path("open-webui"), version, executable)
-    snapshot = replace(snapshot, doctor=replace(snapshot.doctor, webui=interface))
+    script = Path("bin.js") if version else None
+    interface = HarnessStatus(Path("deepseek-harness"), version, script)
+    snapshot = replace(snapshot, doctor=replace(snapshot.doctor, harness=interface))
 
     body = render_setup(snapshot)
 

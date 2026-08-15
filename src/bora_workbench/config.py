@@ -19,16 +19,16 @@ from bora_workbench.paths import config_dir
 
 DEFAULT_MODEL = "unsloth/Qwen3.6-35B-A3B-MTP-GGUF:UD-Q4_K_M"
 DEFAULT_LLAMA_PORT = 8080
-# Open WebUI's own default is 8080, which is `llama_port`, so the two managed services would
-# collide on a first launch if this default were copied from upstream (D-095).
-DEFAULT_WEBUI_PORT = 8081
+# The harness serves 3080 by default, which does not collide with `llama_port`, so this default is
+# upstream's own rather than a value bora had to move out of the way (D-097).
+DEFAULT_UI_PORT = 3080
 DEFAULT_OPEN_BROWSER = True
 
 _ALLOWED_KEYS = {
     "model",
     "model_path",
     "llama_port",
-    "webui_port",
+    "ui_port",
     "engine_path",
     "open_browser",
 }
@@ -36,11 +36,11 @@ _ENVIRONMENT_KEYS = {
     "model": "BORA_MODEL",
     "model_path": "BORA_MODEL_PATH",
     "llama_port": "BORA_LLAMA_PORT",
-    "webui_port": "BORA_WEBUI_PORT",
+    "ui_port": "BORA_UI_PORT",
     "engine_path": "BORA_ENGINE_PATH",
     "open_browser": "BORA_OPEN_BROWSER",
 }
-_PORT_KEYS = ("llama_port", "webui_port")
+_PORT_KEYS = ("llama_port", "ui_port")
 _TRUE_VALUES = {"true", "1", "yes", "on"}
 _FALSE_VALUES = {"false", "0", "no", "off"}
 
@@ -56,7 +56,7 @@ class Config:
     model: str = DEFAULT_MODEL
     model_path: Path | None = None
     llama_port: int = DEFAULT_LLAMA_PORT
-    webui_port: int = DEFAULT_WEBUI_PORT
+    ui_port: int = DEFAULT_UI_PORT
     engine_path: Path | None = None
     open_browser: bool = DEFAULT_OPEN_BROWSER
 
@@ -66,9 +66,9 @@ class Config:
         The check lives on the resolved object rather than on either layer, because the collision
         only exists once precedence has picked a winner for both keys (specification section 5.2).
         """
-        if self.llama_port == self.webui_port:
+        if self.llama_port == self.ui_port:
             raise ConfigError(
-                f"'llama_port' and 'webui_port' must differ; both resolved to {self.llama_port}"
+                f"'llama_port' and 'ui_port' must differ; both resolved to {self.llama_port}"
             )
 
 
@@ -82,7 +82,7 @@ class ConfigSources:
     model: ConfigSource
     model_path: ConfigSource
     llama_port: ConfigSource
-    webui_port: ConfigSource
+    ui_port: ConfigSource
     engine_path: ConfigSource
     open_browser: ConfigSource
 
@@ -239,7 +239,7 @@ def _config_sources(file_values: Mapping[str, Any], overrides: Mapping[str, Any]
         model=_config_source("model", file_values, overrides),
         model_path=_config_source("model_path", file_values, overrides),
         llama_port=_config_source("llama_port", file_values, overrides),
-        webui_port=_config_source("webui_port", file_values, overrides),
+        ui_port=_config_source("ui_port", file_values, overrides),
         engine_path=_config_source("engine_path", file_values, overrides),
         open_browser=_config_source("open_browser", file_values, overrides),
     )

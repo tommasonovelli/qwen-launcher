@@ -11,7 +11,7 @@
 |---|---|
 | bare `bora` | the read-only dashboard and exact composer for the explicit CLI commands |
 | `bora coding` | a local OpenAI-compatible API for editors, scripts, and agents |
-| `bora studio` | browser-based local chat, in Open WebUI when it is installed |
+| `bora studio` | browser-based local agent, in DeepSeek Harness when it is installed |
 | `bora vstudio` | the same interface with the pinned vision projector, for multimodal chat |
 
 `bora-workbench` is a ready-to-use local Qwen environment. It installs the verified `llama.cpp`
@@ -235,7 +235,7 @@ interface in place:
 ```bash
 bora engine install               # engine + weights + browser interface
 bora engine install --no-model    # skip the 22 GB of weights
-bora engine install --no-webui    # skip the browser interface
+bora engine install --no-ui       # skip the browser interface
 bora engine status
 ```
 
@@ -252,21 +252,28 @@ foreground, and `Ctrl-C` stops it and cleans up the state.
 
 ### The browser interface
 
-`bora engine install` installs a pinned [Open WebUI](https://github.com/open-webui/open-webui) into
-its own managed environment, alongside the engine and the weights, because that is already the step
-where a first setup spends gigabytes and waits. `studio` and `vstudio` then start it as a second
-managed service and open it in the browser, only once the engine and the interface have each
-reported ready.
+`bora engine install` installs a pinned
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) into its own managed
+installation, alongside the engine and the weights, because that is already the step where a first
+setup spends gigabytes and waits. `studio` and `vstudio` then start it as a second managed service
+and open it in the browser, only once the engine and the interface have each reported ready.
 
-It costs several gigabytes, because its dependencies pin torch. `bora engine install --no-webui`
-skips it and keeps the interface built into `llama.cpp`, which is essential but needs no extra
-install; `bora webui install` adds it later, and `bora webui remove` frees the space again.
+It costs about 360 MB and needs Node.js 22.19 or newer on `PATH`, plus a C/C++ toolchain on Linux.
+`bora engine install --no-ui` skips it and keeps the interface built into `llama.cpp`, which is
+essential but needs no extra install; `bora ui install` adds it later, and `bora ui remove` frees
+the space again.
 
-Open WebUI is a separate program. bora starts it, configures it through its process environment, and
-never modifies it, writes into its database, or calls its API. The model simply appears in its picker
-as `Qwen 3.6`, the alias the engine already reports. Skills, a system prompt, and web search are
-yours to add through its own screens; chat-title, tag, and follow-up generation are left off, because
-each one spends an extra completion on the single engine you are waiting on.
+DeepSeek Harness is a separate program. bora starts it, configures it through its process
+environment and one launch overlay bora owns, and never modifies it, writes into its storage, or
+calls its API. The model simply appears in its picker as `Qwen 3.6`, the alias the engine already
+reports. The hosted DeepSeek model route and its web search are switched off, because this
+distribution runs locally.
+
+It is an agent harness rather than a chat window: a session runs against a workspace you choose,
+under a permission preset the composer shows, with shell and file tools. The default preset confines
+writes to that workspace and the temporary directories, while reads, network access, and process
+visibility are not confined. Upstream is in developer preview and warns of compatibility-breaking
+changes.
 
 Control it from another terminal:
 

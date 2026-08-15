@@ -1,4 +1,4 @@
-"""Tests for the `bora webui` commands and for keeping the session key out of every output."""
+"""Tests for the `bora ui` commands and for keeping every credential out of every output."""
 
 from __future__ import annotations
 
@@ -8,63 +8,55 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 import bora_workbench._cli_diagnostics as diagnostics_cli
+import bora_workbench._cli_harness as harness_cli
 import bora_workbench._cli_services as service_cli
-import bora_workbench._cli_webui as webui_cli
 import bora_workbench.snapshot as snapshot_module
 from bora_workbench.cli import app
-from bora_workbench.webui import OPEN_WEBUI_VERSION, WebuiError, launch_environment
-from bora_workbench.webui import WebuiLaunch as Launch
+from bora_workbench.harness import DSH_VERSION, HarnessError, render_overlay
+from bora_workbench.harness import HarnessLaunch as Launch
 from tests.test_cli_update import flat
 
 runner = CliRunner()
 
 
-def _status(installed: bool, root: Path = Path("/managed/open-webui")) -> SimpleNamespace:
+def _status(installed: bool, root: Path = Path("/managed/deepseek-harness")) -> SimpleNamespace:
     """Return one inspection result without touching the filesystem."""
-    return SimpleNamespace(is_installed=installed, root=root, executable=None)
+    return SimpleNamespace(is_installed=installed, root=root, script=None)
 
 
 def test_status_reports_an_absent_installation_and_the_remedy(monkeypatch) -> None:
     """Tell a user who never installed it exactly which command changes that."""
-    monkeypatch.setattr(webui_cli, "inspect_webui", lambda: _status(False))
+    monkeypatch.setattr(harness_cli, "inspect_harness", lambda: _status(False))
 
-    result = runner.invoke(app, ["webui", "status"])
+    result = runner.invoke(app, ["ui", "status"])
 
     assert result.exit_code == 0
     assert "not installed" in result.stdout
-    assert "bora webui install" in result.stdout
-    assert "8081" in result.stdout
+    assert "bora ui install" in result.stdout
+    assert "3080" in result.stdout
 
 
 def test_status_reports_the_pinned_version_when_present(monkeypatch) -> None:
     """Name the exact release, so two machines can be compared without guessing."""
-    monkeypatch.setattr(webui_cli, "inspect_webui", lambda: _status(True))
+    monkeypatch.setattr(harness_cli, "inspect_harness", lambda: _status(True))
 
-    result = runner.invoke(app, ["webui", "status"])
+    result = runner.invoke(app, ["ui", "status"])
 
     assert result.exit_code == 0
-    assert OPEN_WEBUI_VERSION in result.stdout
+    assert DSH_VERSION in result.stdout
 
 
-def test_the_session_key_reaches_no_command_output(monkeypatch) -> None:
-    """Keep the first secret this project stores out of status, doctor, and every diagnostic."""
-    secret = "do-not-print-this-key"
-    monkeypatch.setattr(webui_cli, "inspect_webui", lambda: _status(True))
-    monkeypatch.setattr(service_cli, "resolve_secret_key", lambda: secret)
+def test_this_interface_needs_no_stored_secret_at_all(monkeypatch) -> None:
+    """Store nothing: the harness signs no session cookie, so there is no key to keep or leak."""
+    monkeypatch.setattr(harness_cli, "inspect_harness", lambda: _status(True))
 
-    status = runner.invoke(app, ["webui", "status"])
+    status = runner.invoke(app, ["ui", "status"])
     doctor = runner.invoke(app, ["doctor"])
 
-    assert secret not in status.stdout
-    assert secret not in doctor.stdout
-    assert "WEBUI_SECRET_KEY" not in doctor.stdout
-
-
-def test_the_environment_holds_the_key_that_no_output_shows() -> None:
-    """Prove the key is passed where it is needed, which is what makes its absence meaningful."""
-    launch = Launch(Path("open-webui"), 8081, 8080, Path("/data"), "a-secret")
-
-    assert launch_environment(launch)["WEBUI_SECRET_KEY"] == "a-secret"
+    overlay = render_overlay(Launch(Path("bin.js"), 3080, 8080, Path("/home"), "Qwen 3.6"))
+    assert "bora-local" not in overlay
+    assert "bora-local" not in status.stdout
+    assert "bora-local" not in doctor.stdout
 
 
 def test_install_refuses_while_a_managed_service_is_running(monkeypatch) -> None:
@@ -73,10 +65,10 @@ def test_install_refuses_while_a_managed_service_is_running(monkeypatch) -> None
     monkeypatch.setattr(service_cli, "service_roots", lambda: (Path("state"),))
     monkeypatch.setattr(service_cli, "status_services", lambda root: live)
     monkeypatch.setattr(
-        webui_cli, "install_webui", lambda **kwargs: _forbidden("install must not run")
+        harness_cli, "install_harness", lambda **kwargs: _forbidden("install must not run")
     )
 
-    result = runner.invoke(app, ["webui", "install"])
+    result = runner.invoke(app, ["ui", "install"])
 
     assert result.exit_code == 1
     assert "run bora stop" in flat(result.stderr)
@@ -97,52 +89,52 @@ def _no_services(monkeypatch) -> None:
 def test_install_states_the_cost_and_whose_program_it_is(monkeypatch) -> None:
     """Say what the command spends and what it starts, before it spends it."""
     _no_services(monkeypatch)
-    monkeypatch.setattr(webui_cli, "inspect_webui", lambda: _status(False))
-    monkeypatch.setattr(webui_cli, "install_webui", lambda **kwargs: _status(True))
+    monkeypatch.setattr(harness_cli, "inspect_harness", lambda: _status(False))
+    monkeypatch.setattr(harness_cli, "install_harness", lambda **kwargs: _status(True))
 
-    result = runner.invoke(app, ["webui", "install"])
+    result = runner.invoke(app, ["ui", "install"])
 
     assert result.exit_code == 0
-    assert "gigabytes" in result.stdout
+    assert "360 MB" in result.stdout
     assert "separate program" in result.stdout
-    assert OPEN_WEBUI_VERSION in result.stdout
+    assert DSH_VERSION in result.stdout
 
 
 def test_install_maps_a_failure_to_exit_one_without_a_traceback(monkeypatch) -> None:
     """Report an actionable installation failure the way every other command does."""
     _no_services(monkeypatch)
-    monkeypatch.setattr(webui_cli, "inspect_webui", lambda: _status(False))
+    monkeypatch.setattr(harness_cli, "inspect_harness", lambda: _status(False))
 
     def fail(**kwargs):
         """Fail the installation the way a missing prerequisite would."""
         del kwargs
-        raise WebuiError("uv is required to install Open WebUI")
+        raise HarnessError("node is required to install DeepSeek Harness")
 
-    monkeypatch.setattr(webui_cli, "install_webui", fail)
+    monkeypatch.setattr(harness_cli, "install_harness", fail)
 
-    result = runner.invoke(app, ["webui", "install"])
+    result = runner.invoke(app, ["ui", "install"])
 
     assert result.exit_code == 1
-    assert "uv is required" in flat(result.stderr)
+    assert "node is required" in flat(result.stderr)
     assert "Traceback" not in result.stderr
 
 
 def test_doctor_names_the_interface_state_and_its_port(monkeypatch) -> None:
-    """Show on one line whether studio will open Open WebUI or the built-in interface."""
-    monkeypatch.setattr(snapshot_module, "inspect_webui", lambda: _status(False))
+    """Show on one line whether studio will open the harness or the built-in interface."""
+    monkeypatch.setattr(snapshot_module, "inspect_harness", lambda: _status(False))
 
     result = runner.invoke(app, ["doctor"])
 
     assert result.exit_code == 0
     assert "not installed; studio opens the integrated interface" in flat(result.stdout)
-    assert "8081" in result.stdout
+    assert "3080" in result.stdout
 
 
 def test_engine_install_acquires_the_interface_by_default(monkeypatch) -> None:
     """Put the interface where a first setup already spends gigabytes and waits."""
     acquired: list[bool] = []
     monkeypatch.setattr(
-        diagnostics_cli, "install_managed_webui", lambda force, stdout: acquired.append(force)
+        diagnostics_cli, "install_managed_harness", lambda force, stdout: acquired.append(force)
     )
     _stub_engine(monkeypatch)
 
@@ -152,16 +144,16 @@ def test_engine_install_acquires_the_interface_by_default(monkeypatch) -> None:
     assert acquired == [False]
 
 
-def test_no_webui_declines_the_interface_without_removing_anything(monkeypatch) -> None:
-    """Leave a machine that only wants the API free of a six-gigabyte closure."""
+def test_no_ui_declines_the_interface_without_removing_anything(monkeypatch) -> None:
+    """Leave a machine that only wants the API free of a Node dependency tree."""
     monkeypatch.setattr(
         diagnostics_cli,
-        "install_managed_webui",
-        lambda force, stdout: _forbidden("--no-webui must acquire nothing"),
+        "install_managed_harness",
+        lambda force, stdout: _forbidden("--no-ui must acquire nothing"),
     )
     _stub_engine(monkeypatch)
 
-    result = runner.invoke(app, ["engine", "install", "--no-model", "--no-webui"])
+    result = runner.invoke(app, ["engine", "install", "--no-model", "--no-ui"])
 
     assert result.exit_code == 0
 
@@ -181,44 +173,44 @@ def _stub_engine(monkeypatch) -> None:
     monkeypatch.setattr(diagnostics_cli, "_report_install", lambda result, stdout: None)
 
 
-def test_remove_frees_the_environment_and_asks_about_chats_separately(monkeypatch) -> None:
+def test_remove_frees_the_installation_and_asks_about_sessions_separately(monkeypatch) -> None:
     """Ask two questions, because reinstallable bytes and a user's own content differ."""
     removed: list[str] = []
-    root = Path("/managed/open-webui")
-    monkeypatch.setattr(webui_cli, "inspect_webui", lambda: _status(True, root))
-    monkeypatch.setattr(webui_cli, "directory_size", lambda path: 1024)
+    root = Path("/managed/deepseek-harness")
+    monkeypatch.setattr(harness_cli, "inspect_harness", lambda: _status(True, root))
+    monkeypatch.setattr(harness_cli, "directory_size", lambda path: 1024)
     monkeypatch.setattr(Path, "is_dir", lambda self: True)
-    monkeypatch.setattr(webui_cli, "remove_environment", lambda: removed.append("environment"))
-    monkeypatch.setattr(webui_cli, "remove_interface_data", lambda: removed.append("data"))
+    monkeypatch.setattr(harness_cli, "remove_environment", lambda: removed.append("environment"))
+    monkeypatch.setattr(harness_cli, "remove_interface_data", lambda: removed.append("data"))
     _no_services(monkeypatch)
 
-    result = runner.invoke(app, ["webui", "remove"], input="y\nn\n")
+    result = runner.invoke(app, ["ui", "remove"], input="y\nn\n")
 
     assert result.exit_code == 0
-    assert "Remove the managed Open WebUI environment?" in result.stdout
-    assert "Also remove the interface data?" in result.stdout
-    assert "chats, notes, uploads" in result.stdout
+    assert "Remove the managed DeepSeek Harness installation?" in result.stdout
+    assert "Also remove the harness home?" in result.stdout
+    assert "sessions, workspaces" in result.stdout
     assert removed == ["environment"]
 
 
 def test_declining_both_questions_removes_nothing(monkeypatch) -> None:
     """Keep a default of no on both questions, so an accidental Enter deletes nothing."""
-    monkeypatch.setattr(webui_cli, "inspect_webui", lambda: _status(True))
-    monkeypatch.setattr(webui_cli, "directory_size", lambda path: 1024)
+    monkeypatch.setattr(harness_cli, "inspect_harness", lambda: _status(True))
+    monkeypatch.setattr(harness_cli, "directory_size", lambda path: 1024)
     monkeypatch.setattr(Path, "is_dir", lambda self: True)
     monkeypatch.setattr(
-        webui_cli, "remove_environment", lambda: _forbidden("nothing may be removed")
+        harness_cli, "remove_environment", lambda: _forbidden("nothing may be removed")
     )
     monkeypatch.setattr(
-        webui_cli, "remove_interface_data", lambda: _forbidden("nothing may be removed")
+        harness_cli, "remove_interface_data", lambda: _forbidden("nothing may be removed")
     )
     _no_services(monkeypatch)
 
-    result = runner.invoke(app, ["webui", "remove"], input="\n\n")
+    result = runner.invoke(app, ["ui", "remove"], input="\n\n")
 
     assert result.exit_code == 0
-    assert "Environment kept." in result.stdout
-    assert "Interface data kept" in result.stdout
+    assert "Installation kept." in result.stdout
+    assert "Harness home kept" in result.stdout
 
 
 def test_remove_refuses_while_a_managed_service_is_running(monkeypatch) -> None:
@@ -227,14 +219,14 @@ def test_remove_refuses_while_a_managed_service_is_running(monkeypatch) -> None:
     monkeypatch.setattr(service_cli, "service_roots", lambda: (Path("state"),))
     monkeypatch.setattr(service_cli, "status_services", lambda root: live)
 
-    result = runner.invoke(app, ["webui", "remove"])
+    result = runner.invoke(app, ["ui", "remove"])
 
     assert result.exit_code == 1
     assert "run bora stop" in flat(result.stderr)
 
 
 def test_uninstall_names_the_interface_content_it_deletes(monkeypatch) -> None:
-    """Say that a full uninstall takes the chats with it, since nothing asks about them."""
+    """Say that a full uninstall takes the sessions with it, since nothing asks about them."""
     _no_services(monkeypatch)
     monkeypatch.setattr(
         service_cli,
@@ -244,5 +236,5 @@ def test_uninstall_names_the_interface_content_it_deletes(monkeypatch) -> None:
 
     result = runner.invoke(app, ["uninstall"], input="n\n")
 
-    assert "Open WebUI" in flat(result.stdout)
-    assert "bora webui remove" in flat(result.stdout)
+    assert "DeepSeek Harness" in flat(result.stdout)
+    assert "bora ui remove" in flat(result.stdout)

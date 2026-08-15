@@ -79,7 +79,7 @@ def _settings_summary(snapshot: WorkbenchSnapshot) -> str:
         sources.model,
         sources.model_path,
         sources.llama_port,
-        sources.webui_port,
+        sources.ui_port,
         sources.engine_path,
         sources.open_browser,
     )

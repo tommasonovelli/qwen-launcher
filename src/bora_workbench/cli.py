@@ -17,6 +17,11 @@ from bora_workbench._cli_diagnostics import (
     run_validate,
     show_engine_status,
 )
+from bora_workbench._cli_harness import (
+    run_harness_install,
+    run_harness_removal,
+    show_harness_status,
+)
 from bora_workbench._cli_models import RemoveOptions, run_pull, run_remove_model
 from bora_workbench._cli_pi import (
     PiOptions,
@@ -36,7 +41,6 @@ from bora_workbench._cli_services import (
 )
 from bora_workbench._cli_theme import create_console, print_note
 from bora_workbench._cli_update import UpdateOptions, run_update
-from bora_workbench._cli_webui import run_webui_install, run_webui_removal, show_webui_status
 
 if TYPE_CHECKING:
     from bora_workbench.tui.terminal import TerminalMode
@@ -49,8 +53,8 @@ app = typer.Typer(
 )
 engine_app = typer.Typer(help="Install and inspect the pinned managed llama.cpp engine.")
 app.add_typer(engine_app, name="engine")
-webui_app = typer.Typer(help="Install and inspect the managed Open WebUI interface.")
-app.add_typer(webui_app, name="webui")
+ui_app = typer.Typer(help="Install and inspect the managed DeepSeek Harness interface.")
+app.add_typer(ui_app, name="ui")
 # `bora pi` keeps connecting when it is called with no subcommand, so the two ways of undoing that
 # connection can be commands of their own instead of a fifth flag on one overloaded command.
 pi_app = typer.Typer(
@@ -175,12 +179,14 @@ def engine_install_command(
     no_model: bool = typer.Option(
         False, "--no-model", help="Install only the engine, without downloading the weights."
     ),
-    no_webui: bool = typer.Option(
-        False, "--no-webui", help="Skip Open WebUI and keep the integrated llama.cpp interface."
+    no_ui: bool = typer.Option(
+        False,
+        "--no-ui",
+        help="Skip DeepSeek Harness and keep the integrated llama.cpp interface.",
     ),
 ) -> None:
     """Install the engine for detected hardware, the pinned model, and the browser interface."""
-    options = EngineInstallOptions(force, not no_model, not no_webui)
+    options = EngineInstallOptions(force, not no_model, not no_ui)
     run_engine_install(options, _stdout, _stderr)
 
 
@@ -245,24 +251,24 @@ def engine_status_command() -> None:
     show_engine_status(_stdout, _stderr)
 
 
-@webui_app.command("install")
-def webui_install_command(
-    force: bool = typer.Option(False, "--force", help="Rebuild an already installed environment."),
+@ui_app.command("install")
+def ui_install_command(
+    force: bool = typer.Option(False, "--force", help="Reinstall an already installed harness."),
 ) -> None:
-    """Install the pinned Open WebUI so studio and vstudio open it instead of the built-in UI."""
-    run_webui_install(force, _stdout, _stderr)
+    """Install the pinned harness so studio and vstudio open it instead of the built-in UI."""
+    run_harness_install(force, _stdout, _stderr)
 
 
-@webui_app.command("status")
-def webui_status_command() -> None:
-    """Show whether the managed Open WebUI is installed, and where its data lives."""
-    show_webui_status(_stdout, _stderr)
+@ui_app.command("status")
+def ui_status_command() -> None:
+    """Show whether the managed DeepSeek Harness is installed, and where its data lives."""
+    show_harness_status(_stdout, _stderr)
 
 
-@webui_app.command("remove")
-def webui_remove_command() -> None:
-    """Remove the managed Open WebUI, asking about its environment and your chats separately."""
-    run_webui_removal(_stdout, _stderr)
+@ui_app.command("remove")
+def ui_remove_command() -> None:
+    """Remove the managed harness, asking about its installation and your sessions separately."""
+    run_harness_removal(_stdout, _stderr)
 
 
 @app.command()
@@ -277,7 +283,7 @@ def coding(
 def studio(
     force: bool = typer.Option(False, "--force", help=_MEMORY_GATE_HELP),
 ) -> None:
-    """Launch text chat mode, opening Open WebUI when installed and the built-in UI otherwise."""
+    """Launch text studio mode, opening the harness when installed and the built-in UI otherwise."""
     run_studio(force, _stdout, _stderr)
 
 

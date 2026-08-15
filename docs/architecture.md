@@ -77,7 +77,7 @@ before another Textual lifetime begins, so their output remains readable.
 | `profiles.py` | runtime modes, gates, and `LaunchPlan` |
 | `engine.py`, `_engine_*` | lock, model, assets, download/build, installation, and command |
 | `process.py`, `_process_*` | port, startup lock, processes, readiness, state, status, and stop, for both service roles |
-| `webui.py` | the managed Open WebUI: installation, environment, command, and readiness contract |
+| `harness.py` | the managed DeepSeek Harness: installation, overlay, environment, command, and readiness contract |
 | `uninstall.py` | confined removal of the managed roots |
 | `update.py` | published release lookup, checksum-verified wheel, and uv installation |
 | `_tool_handoff.py`, `_tool_helper.py` | identifying the uv installation and running one uv command after this process exits |
@@ -233,7 +233,7 @@ Before startup the launcher:
 7. appends to `services.json` atomically;
 8. releases the lock and waits for that service's own READY.
 
-There are two roles: `engine`, which serves the model, and `interface`, the optional Open WebUI in
+There are two roles: `engine`, which serves the model, and `interface`, the optional harness in
 front of it. A UI mode runs one of each, and each start is a separate pass through the sequence
 above under the same lock. The interface record carries no context window, backend, or model,
 because it has none of its own; `status` shows the role and leaves those columns empty for it.
@@ -241,10 +241,12 @@ because it has none of its own; `status` shows the role and leaves those columns
 
 Health polling uses 2-second requests every second. Connection refused, timeouts, and 5xx are
 transient. Each role declares its own readiness contract: the engine's comes from `engine.lock` and
-requires HTTP 200 with the exact body `{"status":"ok"}` within 15 minutes; Open WebUI's is
-`GET /ready` with `{"status": true}`, retrying 503, within a longer first-start allowance. A 4xx, or
-an incompatible 200 body, fails immediately. Open WebUI's `GET /health` is never polled: it answers
-200 before startup has finished.
+requires HTTP 200 with the exact body `{"status":"ok"}` within 15 minutes; the harness's is
+`GET /` at 200 with no body check, retrying the 404 its fallback route answers until the page owner
+registers. A 4xx other than that, or an incompatible 200 body where a contract declares one, fails
+immediately. The harness has no health or readiness route to poll: its single-page application
+answers every unmatched path, so `/ready` and `/health` return that same page and a body comparison
+would accept a server that is not serving.
 
 The state is version 1 and is replaced through a temporary file in the same directory, followed by
 flush and `replace`. A record written before the interface existed decodes unchanged and reads as

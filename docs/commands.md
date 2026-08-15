@@ -20,14 +20,14 @@ on the main group and on every command. Typer also exposes
 | bare `bora` | opens the read-only dashboard and exact command composer | no |
 | `engine status` | inspects the managed engine | no |
 | `engine install` | installs the engine, the model, and the browser interface | yes |
-| `webui status` | reports whether the managed Open WebUI is installed | no |
-| `webui install` | installs the pinned Open WebUI into its own environment | yes |
-| `webui remove` | frees the interface environment, and your chats if confirmed | yes |
+| `ui status` | reports whether the managed DeepSeek Harness is installed | no |
+| `ui install` | installs the pinned DeepSeek Harness into its own tree | yes |
+| `ui remove` | frees the interface installation, and your sessions if confirmed | yes |
 | `pull` | downloads and verifies the pinned model | yes |
 | `rm` | deletes the pinned model after confirmation | yes |
 | `pi` | connects or launches the pi coding agent against the local service | pi's config or none |
 | `coding` | starts the text API | state and logs |
-| `studio` | starts the text UI, Open WebUI when installed | state and logs |
+| `studio` | starts the text UI, DeepSeek Harness when installed | state and logs |
 | `vstudio` | starts the same UI with vision | state and logs |
 | `status` | shows live services and clears stale state | if needed |
 | `stop` | stops verified managed services | yes |
@@ -126,7 +126,7 @@ every blocking difference is written to stderr as one redirectable list.
 bora engine install
 bora engine install --force
 bora engine install --no-model
-bora engine install --no-webui
+bora engine install --no-ui
 ```
 
 Detects CPU/CUDA, selects the exact asset set from the lock, downloads over HTTPS, verifies SHA-256,
@@ -143,16 +143,16 @@ not finished yet. The `--version` and `--help` probes are bounded to 60 seconds 
 installs no system prerequisites and never elevates privileges.
 
 Once the engine is active it downloads the pinned model, exactly as `pull` does, and then installs
-the browser interface, exactly as `webui install` does, so that a first setup is one command. After
+the browser interface, exactly as `ui install` does, so that a first setup is one command. After
 it, `bora studio` opens a finished chat interface with the model already in its picker.
 
 Two flags decline a download; neither removes anything already present:
 
 - `--no-model` installs only the engine. The model is about 22 GB, so this is the option for a
   metered connection, or when the weights are being acquired another way.
-- `--no-webui` skips Open WebUI, whose closure pins torch and costs several gigabytes. Use it on a
+- `--no-ui` skips DeepSeek Harness, which costs about 360 MB and needs Node.js. Use it on a
   machine that only wants the API for an editor or an agent; `studio` and `vstudio` then keep opening
-  the integrated llama.cpp interface, and `bora webui install` adds it later.
+  the integrated llama.cpp interface, and `bora ui install` adds it later.
 
 ## `pull`
 
@@ -344,27 +344,27 @@ Once READY, the CLI shows:
 - the local record, or the non-optimized baseline;
 - the API at `http://127.0.0.1:<port>/v1`;
 - for `studio`/`vstudio`, the UI, and which interface it is;
-- the log path, and the interface log when Open WebUI is running.
+- the log path, and the interface log when the harness is running.
 
 The contract also exposes `/health`, `/v1/models`, `/v1/chat/completions`, and `/metrics`. The
 service listens on `127.0.0.1` only. `/v1/models` reports the model as `Qwen 3.6`, which is the
 alias the engine is launched with; that name is what a client sends back in a request, and it is
-also what the Open WebUI model picker shows.
+also what the harness model picker shows.
 
 ### Which interface `studio` and `vstudio` open
 
-`bora webui install` decides it, and nothing else does:
+`bora ui install` decides it, and nothing else does:
 
-| Open WebUI | UI URL | What opens |
+| DeepSeek Harness | UI URL | What opens |
 |---|---|---|
-| installed | `http://127.0.0.1:<webui_port>` | Open WebUI, started as a second managed service |
+| installed | `http://127.0.0.1:<ui_port>` | DeepSeek Harness, started as a second managed service |
 | not installed | `http://127.0.0.1:<llama_port>/` | the integrated llama.cpp interface |
 
 The browser opens only when `open_browser=true`, and only once **both** services have answered their
-own readiness check: the engine its locked health endpoint, Open WebUI its `/ready`. A tab is never
+own readiness check: the engine its locked health endpoint, the harness its page route. A tab is never
 opened onto a page that cannot yet answer.
 
-If Open WebUI is installed but fails to start, the engine keeps serving, the reason and its log are
+If the harness is installed but fails to start, the engine keeps serving, the reason and its log are
 printed, and the integrated interface opens instead. A UI mode never exits because the interface
 failed.
 
@@ -382,58 +382,64 @@ Replace `8080` if `llama_port` differs. Any client compatible with the local Ope
 endpoint works; the current managed server requires no key.
 
 The command stays attached to the process. `Ctrl-C` terminates the server, removes the state, and
-returns 130. A natural non-zero exit returns 1 and points to the log. When Open WebUI is running it
+returns 130. A natural non-zero exit returns 1 and points to the log. When the harness is running it
 is taken down first on every exit path, so a live page never keeps talking to a server that is
 already terminating.
 
-## `webui install`
+## `ui install`
 
 ```bash
-bora webui install [--force]
+bora ui install [--force]
 ```
 
-Installs the pinned `open-webui` release into a managed virtual environment under the data root,
-using `uv`. **`bora engine install` already does this**, so this command is for adding the interface
-later, or for repairing it with `--force`. uv's own progress is shown as it resolves and downloads.
+Installs the pinned `@deepseek-ai/dsh` release into a managed npm prefix under the data root.
+**`bora engine install` already does this**, so this command is for adding the interface later, or
+for repairing it with `--force`. npm's own progress is shown as it resolves and downloads.
+
+It needs **Node.js 22.19 or newer** on `PATH`, which is checked by name before anything is
+downloaded, and on Linux a C/C++ toolchain: one dependency ships no prebuilt binary there and is
+compiled during the install. Install scripts are deliberately not skipped — the harness mounts that
+native dependency as a boot-time plugin, so a tree installed without them does not start at all.
 
 It is never a step of `bora studio`: by the time you launch a mode, the interface is either there or
 it is not, and a launch does not stop to download gigabytes.
 
-The version is recorded only after the installation produced a working `open-webui` console script,
-so an interrupted install reports as absent and the next run rebuilds it rather than trusting a
-partial environment. Running it again when the pinned version is already present does nothing;
-`--force` rebuilds anyway. It refuses while any managed service is running, because a live interface
-holds that environment open.
+The version is recorded only after the installation produced the harness entry module, so an
+interrupted install reports as absent and the next run rebuilds it rather than trusting a partial
+tree. Running it again when the pinned version is already present does nothing; `--force` reinstalls
+anyway. It refuses while any managed service is running, because a live interface holds that tree
+open.
 
-Open WebUI is an upstream program. bora starts it, configures it through its process environment,
-and never modifies it, writes into its database, or calls its API. Its licence ships in
-`resources/notices/open-webui-LICENSE`.
+DeepSeek Harness is an upstream program. bora starts it, configures it through its process
+environment and one launch overlay bora owns and rewrites in its own managed root, and never modifies
+it, writes into its storage, or calls its API. Its licence ships in
+`resources/notices/deepseek-harness-LICENSE`.
 
-## `webui status`
+## `ui status`
 
 ```bash
-bora webui status
+bora ui status
 ```
 
-Reports whether the pinned version is installed, where its environment and its data live, and which
-port it would listen on. It never prints the session key.
+Reports whether the pinned version is installed, where its installation and its home live, and which
+port it would listen on.
 
-## `webui remove`
+## `ui remove`
 
 ```bash
-bora webui remove
+bora ui remove
 ```
 
 Removes the managed interface and asks **two separate questions**, because they delete different
 kinds of thing:
 
-1. **the environment** — the several gigabytes bora installed. Answering yes frees them and prints
-   how much; `bora webui install` puts it back;
-2. **the interface data** — your chats, notes, uploads and settings. This is content you made, it is
+1. **the installation** — the megabytes bora fetched. Answering yes frees them and prints how much;
+   `bora ui install` puts it back;
+2. **the harness home** — your sessions, workspaces and settings. This is content you made, it is
    not backed up anywhere, and removing it cannot be undone.
 
-Both default to no. Declining the second leaves your chats where they were, so a later install finds
-them again. Removal refuses while any managed service is running, and never follows a symlink out of
+Both default to no. Declining the second leaves your sessions where they were, so a later install
+finds them again. Removal refuses while any managed service is running, and never follows a symlink out of
 the managed root.
 
 `bora uninstall` deletes both without asking separately, because it deletes the whole data root; its

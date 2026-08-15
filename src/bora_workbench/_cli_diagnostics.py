@@ -21,6 +21,7 @@ from rich.table import Table
 from rich.text import Text
 
 from bora_workbench._calibration_reuse import RecordEvaluation
+from bora_workbench._cli_harness import install_managed_harness
 from bora_workbench._cli_models import pull_model
 from bora_workbench._cli_theme import (
     format_bytes,
@@ -34,7 +35,6 @@ from bora_workbench._cli_theme import (
     progress_columns,
     status_table,
 )
-from bora_workbench._cli_webui import install_managed_webui
 from bora_workbench.config import ConfigError
 from bora_workbench.engine import (
     Backend,
@@ -47,6 +47,7 @@ from bora_workbench.engine import (
     load_engine_lock,
 )
 from bora_workbench.hardware import HardwareError, HardwareInfo, detect_hardware
+from bora_workbench.harness import DSH_VERSION, HarnessError
 from bora_workbench.profiles import ContentError
 from bora_workbench.snapshot import (
     DoctorSnapshot,
@@ -55,7 +56,6 @@ from bora_workbench.snapshot import (
     record_display_label,
 )
 from bora_workbench.validation import ValidationIssue, ValidationResult, validate_resources
-from bora_workbench.webui import OPEN_WEBUI_VERSION, WebuiError
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +64,7 @@ class EngineInstallOptions:
 
     force: bool
     include_model: bool
-    include_webui: bool = True
+    include_ui: bool = True
 
 
 def _position(event: InstallProgressEvent) -> str:
@@ -284,9 +284,9 @@ def run_engine_install(options: EngineInstallOptions, stdout: Console, stderr: C
         _report_install(result, stdout)
         if options.include_model:
             pull_model(load_engine_lock(), stdout)
-        if options.include_webui:
-            install_managed_webui(options.force, stdout)
-    except (EngineError, HardwareError, WebuiError) as error:
+        if options.include_ui:
+            install_managed_harness(options.force, stdout)
+    except (EngineError, HardwareError, HarnessError) as error:
         print_error(stderr, "Engine installation error", str(error))
         raise typer.Exit(code=1) from error
     except KeyboardInterrupt as error:
@@ -350,11 +350,11 @@ def _gpu_label(hardware: HardwareInfo) -> str:
     return f"{hardware.gpu_name} (index {hardware.gpu_index}, detected {hardware.gpu_count})"
 
 
-def _webui_label(data: DoctorSnapshot) -> str:
+def _harness_label(data: DoctorSnapshot) -> str:
     """Name the installed interface version, or say plainly that the built-in one is used."""
-    if data.webui is None or not data.webui.is_installed:
+    if data.harness is None or not data.harness.is_installed:
         return "not installed; studio opens the integrated interface"
-    return f"{OPEN_WEBUI_VERSION} installed"
+    return f"{DSH_VERSION} installed"
 
 
 def _doctor_table(data: DoctorSnapshot) -> Table:
@@ -369,8 +369,8 @@ def _doctor_table(data: DoctorSnapshot) -> Table:
         ("Configuration", "valid"),
         ("Model", config.model),
         ("llama.cpp port", str(config.llama_port)),
-        ("Open WebUI", _webui_label(data)),
-        ("Open WebUI port", str(config.webui_port)),
+        ("DeepSeek Harness", _harness_label(data)),
+        ("Interface port", str(config.ui_port)),
         ("OS", f"{hardware.os_name} — {hardware.os_version}"),
         ("CPU", f"{hardware.cpu_name} ({hardware.cpu_cores} logical cores)"),
         ("RAM total", _gib(hardware.ram_total_gib)),

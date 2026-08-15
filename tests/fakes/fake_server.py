@@ -36,7 +36,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"data": []})
             return
         if self.path == "/":
-            self._send_json(200, {"interface": "fake integrated UI"})
+            # The harness serves its page from the fallback route, which answers 404 until its
+            # owner registers during boot. `startup` holds the server in that phase, which is the
+            # only transient state a status-only readiness contract can observe (D-097).
+            if self.server.health_mode == "startup":
+                self._send_json(404, {"error": "not found"})
+            else:
+                self._send_json(200, {"interface": "fake integrated UI"})
             return
         if self.path == "/ready":
             # `startup` is the one shape only the interface has: liveness answers 200 while

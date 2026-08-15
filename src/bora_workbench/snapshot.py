@@ -28,6 +28,7 @@ from bora_workbench.engine import (
     load_engine_lock,
 )
 from bora_workbench.hardware import HardwareError, HardwareInfo, detect_hardware
+from bora_workbench.harness import HarnessStatus, inspect_harness
 from bora_workbench.models import ModelInspection, inspect_model
 from bora_workbench.paths import cache_dir, config_dir, data_dir, state_dir
 from bora_workbench.pi_link import (
@@ -40,7 +41,6 @@ from bora_workbench.pi_link import (
 from bora_workbench.process import ServiceInspection, ServiceState, inspect_services
 from bora_workbench.profiles import Catalog, ContentError, load_catalog
 from bora_workbench.validation import ValidationResult, validate_resources
-from bora_workbench.webui import WebuiStatus, inspect_webui
 
 
 class SnapshotError(RuntimeError):
@@ -115,7 +115,7 @@ class DoctorSnapshot:
     engine: EngineStatus
     paths: PublicPaths
     lock: JsonObject | None
-    webui: WebuiStatus | None = None
+    harness: HarnessStatus | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +195,7 @@ def collect_doctor_snapshot(version: str) -> DoctorSnapshot:
         managed_engine,
         paths,
         lock,
-        inspect_webui(),
+        inspect_harness(),
     )
 
 

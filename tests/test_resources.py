@@ -45,16 +45,17 @@ def test_managed_engine_notices_match_spike_evidence():
         assert hashlib.sha256(read_text(name).encode()).hexdigest() == digest
 
 
-def test_the_open_webui_licence_is_shipped_verbatim():
-    """Carry the upstream licence of the interface bora starts, read at tag `v0.11.0`."""
-    notice = read_text("notices/open-webui-LICENSE")
+def test_the_harness_licence_is_shipped_verbatim():
+    """Carry the upstream licence of the interface bora starts, read at npm `0.1.0-rc.6`."""
+    notice = read_text("notices/deepseek-harness-LICENSE")
 
     assert (
         hashlib.sha256(notice.encode()).hexdigest()
-        == "5f1bd74c48bf13ab0f82e177ad9e637313b92533d20ead2593d49347a47fc232"
+        == "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be"
     )
-    # Clause 4 is the reason `WEBUI_NAME` is never set: the interface keeps its own name.
-    assert 'from altering, removing, obscuring, or replacing any "Open WebUI"' in notice
+    # MIT, so unlike the interface it replaces no clause constrains how bora names it.
+    assert "MIT License" in notice
+    assert "Copyright (c) 2026 DeepSeek" in notice
 
 
 @pytest.mark.parametrize("path", ["../README.md", "/tmp/file", r"C:\\tmp\\file"])

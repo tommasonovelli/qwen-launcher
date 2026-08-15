@@ -3,6 +3,10 @@
 This page describes the current GitHub-only process. Creating or modifying remote resources always
 requires explicit human authorization for the push, tag, and GitHub Release.
 
+> **Note (D-097).** The `0.5.x` entries below describe Open WebUI, which is what those
+> versions shipped. The `spike/deepseek-harness` branch replaces that program with DeepSeek
+> Harness; this file is release history and is not rewritten by that branch.
+
 ## Public status
 
 - release described by this branch: `bora-workbench 0.5.1`;

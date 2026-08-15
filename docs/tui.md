@@ -128,7 +128,7 @@ Action, flag, and command state remain text-visible without colour.
 |---|---|---|
 | Run | `bora coding|studio|vstudio [--force]` | terminal; do not reopen |
 | Calibration | `bora calibrate --mode ...` with valid current options | terminal; do not reopen |
-| Setup | engine status/install, `pull`, `rm`, and `webui install`/`remove` forms | wait for Enter, then refresh |
+| Setup | engine status/install, `pull`, `rm`, and `ui install`/`remove` forms | wait for Enter, then refresh |
 | Diagnostics | doctor, validate, status, engine status, and stop | wait for Enter, then refresh |
 | Pi | `bora pi launch` | terminal; do not reopen |
 | Pi | link/print/install/remove/uninstall forms | wait for Enter, then refresh |

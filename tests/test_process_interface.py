@@ -1,7 +1,7 @@
 """Lifecycle tests for the second managed service, using the offline fake HTTP surface.
 
 The interface is started with the same fake server the engine tests use, so nothing here installs
-Open WebUI, reaches the network beyond loopback, or runs a real interface. What is asserted is the
+the harness, reaches the network beyond loopback, or runs a real interface. What is asserted is the
 part that has to hold whatever program sits behind the port: the two roles coexist, only one of
 each may run, readiness comes from `/ready`, and stop takes the interface down first.
 """
@@ -18,7 +18,7 @@ import pytest
 
 import bora_workbench.process as lifecycle
 from bora_workbench._process_state import ENGINE_ROLE, INTERFACE_ROLE
-from bora_workbench.webui import readiness_contract
+from bora_workbench.harness import readiness_contract
 from tests.test_process_lifecycle import fast_health, free_port, request
 
 _FAKE_SERVER = Path(__file__).parent / "fakes" / "fake_server.py"
@@ -47,7 +47,7 @@ def stop_managed_services(tmp_path):
 def interface_request(
     port: int, mode: str = "ready", timeout: float = _TEST_TIMEOUT_SECONDS
 ) -> lifecycle.InterfaceRequest:
-    """Build one fake interface launch carrying the real Open WebUI readiness contract.
+    """Build one fake interface launch carrying the real harness readiness contract.
 
     Only the deadline is shortened, and it is shortened on the request rather than on a module
     constant, so every rule the contract states is the one production uses.
@@ -58,7 +58,7 @@ def interface_request(
     """
     command = (sys.executable, str(_FAKE_SERVER), "--port", str(port), "--health-mode", mode)
     readiness = replace(readiness_contract(port), timeout_seconds=timeout)
-    return lifecycle.InterfaceRequest(command, dict(os.environ), port, "studio", readiness)
+    return lifecycle.InterfaceRequest(command, dict(os.environ), port, "studio", readiness, "dsh")
 
 
 def test_the_engine_and_the_interface_run_beside_each_other(tmp_path, monkeypatch) -> None:
@@ -90,8 +90,13 @@ def test_an_engine_still_refuses_a_second_engine(tmp_path, monkeypatch) -> None:
         lifecycle.start_service(request(free_port()), tmp_path)
 
 
-def test_liveness_alone_is_never_read_as_readiness(tmp_path, monkeypatch) -> None:
-    """Refuse to call an interface ready while `/health` answers 200 and `/ready` answers 503."""
+def test_a_transient_status_is_never_read_as_readiness(tmp_path, monkeypatch) -> None:
+    """Refuse to call an interface ready while its page route still answers 404.
+
+    The harness publishes no readiness endpoint, so the contract checks the status alone. What has
+    to stay true is that the one transient status it can observe is retried rather than accepted:
+    a 404 means the fallback route has not been claimed yet, not that the server is serving.
+    """
     fast_health(monkeypatch)
 
     with pytest.raises(lifecycle.ProcessError, match="did not become ready"):

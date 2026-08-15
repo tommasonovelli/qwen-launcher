@@ -120,7 +120,7 @@ def compose_engine_status() -> CommandSpec:
 
 
 def compose_engine_install(
-    is_force: bool = False, is_model_skipped: bool = False, is_webui_skipped: bool = False
+    is_force: bool = False, is_model_skipped: bool = False, is_ui_skipped: bool = False
 ) -> CommandSpec:
     """Compose engine installation with only its three current optional flags."""
     arguments = ["engine", "install"]
@@ -128,27 +128,27 @@ def compose_engine_install(
         arguments.append("--force")
     if is_model_skipped:
         arguments.append("--no-model")
-    if is_webui_skipped:
-        arguments.append("--no-webui")
+    if is_ui_skipped:
+        arguments.append("--no-ui")
     return _command(*arguments)
 
 
-def compose_webui_status() -> CommandSpec:
+def compose_ui_status() -> CommandSpec:
     """Compose the existing non-mutating managed-interface status command."""
-    return _command("webui", "status")
+    return _command("ui", "status")
 
 
-def compose_webui_install(is_force: bool = False) -> CommandSpec:
+def compose_ui_install(is_force: bool = False) -> CommandSpec:
     """Compose acquisition of the pinned browser interface on its own."""
-    arguments = ["webui", "install"]
+    arguments = ["ui", "install"]
     if is_force:
         arguments.append("--force")
     return _command(*arguments)
 
 
-def compose_webui_remove() -> CommandSpec:
+def compose_ui_remove() -> CommandSpec:
     """Compose interface removal while retaining both of its separate CLI confirmations."""
-    return _command("webui", "remove")
+    return _command("ui", "remove")
 
 
 def compose_pull() -> CommandSpec:

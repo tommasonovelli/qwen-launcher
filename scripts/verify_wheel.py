@@ -29,7 +29,7 @@ def _resource_probe() -> str:
         "assert lock['release'] == 'b10011' and lock['assets_complete']; "
         "assert 'ggml authors' in read_text('notices/llama.cpp-LICENSE'); "
         "assert 'NVIDIA' in read_text('notices/NVIDIA-CUDA-EULA.html'); "
-        "assert 'Open WebUI License' in read_text('notices/open-webui-LICENSE'); "
+        "assert 'MIT License' in read_text('notices/deepseek-harness-LICENSE'); "
         "assert hashlib.sha256(resource('benchmark-v1/prompt.txt').read_bytes()).hexdigest() == "
         "'1c7182235411da2d4fe6fca130e3effb0b0d965569c52abd8fd45327103ddb2e'; "
         "assert hashlib.sha256(resource('benchmark-v1/request.json').read_bytes()).hexdigest() == "

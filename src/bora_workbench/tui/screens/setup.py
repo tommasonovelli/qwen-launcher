@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bora_workbench.harness import DSH_VERSION
 from bora_workbench.models import ArtifactInspection
 from bora_workbench.snapshot import WorkbenchSnapshot
 from bora_workbench.tui.actions import (
@@ -9,32 +10,29 @@ from bora_workbench.tui.actions import (
     compose_engine_status,
     compose_pull,
     compose_remove_model,
-    compose_webui_install,
-    compose_webui_remove,
+    compose_ui_install,
+    compose_ui_remove,
 )
 from bora_workbench.tui.choices import Choice, ChoiceList, Flag
 from bora_workbench.tui.palette import Palette
 from bora_workbench.tui.section import Section
-from bora_workbench.webui import OPEN_WEBUI_VERSION
 
 _FORCE = "force"
 _NO_MODEL = "no-model"
-_NO_WEBUI = "no-webui"
+_NO_UI = "no-ui"
 _KEEP_CACHE = "keep-cache"
 _DRY_RUN = "dry-run"
 _NOTE = (
     "- Opening this screen never downloads or hashes model payloads.",
     "- `keep-cache` leaves shared Hugging Face copies; `dry-run` deletes nothing.",
-    "- `no-model` and `no-webui` decline a download; neither removes anything already present.",
+    "- `no-model` and `no-ui` decline a download; neither removes anything already present.",
     "- Downloads, verification, and confirmations begin after the workbench closes.",
 )
 CHOICES: tuple[Choice, ...] = (
     Choice(
         "install or repair engine",
-        lambda flags: compose_engine_install(
-            _FORCE in flags, _NO_MODEL in flags, _NO_WEBUI in flags
-        ),
-        (Flag("f", _FORCE), Flag("n", _NO_MODEL), Flag("w", _NO_WEBUI)),
+        lambda flags: compose_engine_install(_FORCE in flags, _NO_MODEL in flags, _NO_UI in flags),
+        (Flag("f", _FORCE), Flag("n", _NO_MODEL), Flag("u", _NO_UI)),
         "Install the locked llama.cpp build and, by default, the model and the interface.",
     ),
     Choice(
@@ -50,14 +48,14 @@ CHOICES: tuple[Choice, ...] = (
     ),
     Choice(
         "install browser interface",
-        lambda flags: compose_webui_install(_FORCE in flags),
+        lambda flags: compose_ui_install(_FORCE in flags),
         (Flag("f", _FORCE),),
-        "Acquire the pinned Open WebUI on its own, several gigabytes, once.",
+        "Acquire the pinned DeepSeek Harness on its own, about 360 MB, once.",
     ),
     Choice(
         "remove browser interface",
-        lambda flags: compose_webui_remove(),
-        description="Free the environment, and answer separately about your own chats.",
+        lambda flags: compose_ui_remove(),
+        description="Free the installation, and answer separately about your own sessions.",
     ),
     Choice(
         "inspect engine compatibility",
@@ -102,10 +100,10 @@ def _model_lines(snapshot: WorkbenchSnapshot) -> tuple[str, ...]:
 
 def _interface_lines(snapshot: WorkbenchSnapshot) -> tuple[str, ...]:
     """Describe which interface a UI mode would open, without probing anything."""
-    webui = snapshot.doctor.webui
-    if webui is None:
+    harness = snapshot.doctor.harness
+    if harness is None:
         return ("", "Browser interface", "Inspection unavailable.")
-    if not webui.is_installed:
+    if not harness.is_installed:
         return (
             "",
             "Browser interface",
@@ -115,9 +113,9 @@ def _interface_lines(snapshot: WorkbenchSnapshot) -> tuple[str, ...]:
     return (
         "",
         "Browser interface",
-        f"state         Open WebUI {OPEN_WEBUI_VERSION} installed",
-        "opens         Open WebUI, started beside the engine once both are ready",
-        f"environment   {webui.root}",
+        f"state         DeepSeek Harness {DSH_VERSION} installed",
+        "opens         DeepSeek Harness, started beside the engine once both are ready",
+        f"installation  {harness.root}",
     )
 
 

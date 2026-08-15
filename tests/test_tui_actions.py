@@ -115,7 +115,7 @@ def test_every_composed_command_recursively_parses_to_a_real_leaf(
     assert leaf == arguments[-1]
 
 
-_GROUPS = frozenset({"engine", "pi", "webui"})
+_GROUPS = frozenset({"engine", "pi", "ui"})
 
 
 def _expected_leaf(arguments: tuple[str, ...]) -> str:
@@ -146,19 +146,19 @@ def test_setup_toggles_reach_every_engine_and_removal_option_state() -> None:
         ("engine", "install"),
         ("engine", "install", "--force"),
         ("engine", "install", "--no-model"),
-        ("engine", "install", "--no-webui"),
+        ("engine", "install", "--no-ui"),
         ("engine", "install", "--force", "--no-model"),
-        ("engine", "install", "--force", "--no-webui"),
-        ("engine", "install", "--no-model", "--no-webui"),
-        ("engine", "install", "--force", "--no-model", "--no-webui"),
+        ("engine", "install", "--force", "--no-ui"),
+        ("engine", "install", "--no-model", "--no-ui"),
+        ("engine", "install", "--force", "--no-model", "--no-ui"),
         ("pull",),
         ("rm",),
         ("rm", "--keep-hf"),
         ("rm", "--dry-run"),
         ("rm", "--keep-hf", "--dry-run"),
-        ("webui", "install"),
-        ("webui", "install", "--force"),
-        ("webui", "remove"),
+        ("ui", "install"),
+        ("ui", "install", "--force"),
+        ("ui", "remove"),
         ("engine", "status"),
     )
 
