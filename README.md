@@ -270,10 +270,10 @@ reports. The hosted DeepSeek model route and its web search are switched off, be
 distribution runs locally.
 
 It is an agent harness rather than a chat window: a session runs against a workspace you choose,
-under a permission preset the composer shows, with shell and file tools. The default preset confines
-writes to that workspace and the temporary directories, while reads, network access, and process
-visibility are not confined. Upstream is in developer preview and warns of compatibility-breaking
-changes.
+under a permission preset the composer shows, with shell and file tools. bora opens sessions
+**read-only**, so a new session cannot change your files until you raise the preset yourself.
+Reads, network access, and process visibility are not confined at any preset. Upstream is in
+developer preview and warns of compatibility-breaking changes.
 
 Control it from another terminal:
 

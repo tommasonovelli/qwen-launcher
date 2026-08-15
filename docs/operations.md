@@ -371,10 +371,11 @@ preset the composer shows, and it can read and edit files there and run commands
 
 Two consequences are worth stating plainly:
 
-- the default preset confines **writes** — shell and filesystem mutations — to the selected
-  workspace and the platform temporary directories. **Reads, network access, and process visibility
-  are not confined.** Choose the workspace deliberately, and read what a session proposes before
-  approving it;
+- bora opens sessions on the **`read-only`** preset, not upstream's `workspace-write`, so a new
+  session cannot change your files at all and asks before acting. Raise it in the composer when
+  you want the agent to edit something. At `workspace-write`, mutations are confined to the
+  selected workspace and the temporary directories, while **reads, network access, and process
+  visibility are not confined** at any preset — so choose the workspace deliberately;
 - what keeps it local is the loopback rule. Both managed services bind `127.0.0.1` only, and that
   address is a constant in the code rather than a setting. There is no authentication, no TLS, and
   no origin policy in front of it, and the inference endpoint beside it has no authentication
@@ -387,16 +388,18 @@ than merely left without a key, and an inherited `DEEPSEEK_API_KEY` is removed f
 environment so it cannot quietly re-enable one. Telemetry is hard-disabled by the switch upstream
 documents as authoritative. The only route configured is the managed llama-server on loopback.
 
-### Session titles cost an extra completion
+### Session titles cost no extra completion
 
-The harness generates a session title with a second completion per turn, against the same single
-engine and serialized behind the stream you are waiting on. Upstream exposes no switch for it, so
-unlike the interface it replaces this cost is present and is not something bora can turn off.
+The harness would otherwise name a session with a second completion per turn, against the same
+single engine and serialized behind the stream you are waiting on. bora's overlay disables the
+model-backed titler, so a turn issues exactly one completion. Sessions are still named: the row
+that owns title state stays, and upstream's own fallback derives a short title from your first
+prompt without calling the model.
 
 ### What bora configures, and what is yours
 
 bora passes one launch overlay it owns, rewritten on every start, holding the provider route, the
-default model, and the two disabled routes. Everything else in `$DSH_HOME` — your sessions,
+default model, the two disabled hosted routes, and the disabled model-backed titler. Everything else in `$DSH_HOME` — your sessions,
 workspaces and settings — is yours, and bora neither reads nor rewrites it.
 
 ### Removing it

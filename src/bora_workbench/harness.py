@@ -50,6 +50,9 @@ _OVERLAY_NAME = "bora.patch.yml"
 _CREDENTIAL_VARIABLE = "BORA_LOCAL_KEY"
 _LOCAL_CREDENTIAL = "bora-local"
 _PROVIDER_ROUTE = "bora"
+# One of upstream's three shipped presets. `read-only` still asks before acting; `workspace-write`
+# would let a session edit the launch directory without the user having chosen that.
+_PERMISSION_MODE = "read-only"
 _VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)")
 
 
@@ -322,6 +325,11 @@ def overlay_rows(launch: HarnessLaunch) -> list[dict[str, object]]:
         {"id": "llm-deepseek", "disabled": True},
         # A local distribution does not phone home: the search tool reaches a hosted endpoint.
         {"id": "web-search-deepseek", "disabled": True},
+        # A second completion per turn, on the one calibrated slot, serialized behind the stream
+        # the user is waiting on. Only the model-backed titler is dropped: the row that owns title
+        # state stays, so a session is still named from its first prompt by the upstream fallback
+        # rather than losing its title (D-097, restoring what D-094 W5 settled).
+        {"id": "session-title-llm", "disabled": True},
     ]
 
 
@@ -401,9 +409,11 @@ def _managed_settings(launch: HarnessLaunch) -> dict[str, str]:
         # Any non-empty value is upstream's authoritative hard opt-out; a local distribution does
         # not export session text, tool arguments, or workspace paths.
         "DSH_TELEMETRY_DISABLED": "1",
-        # Sessions still open on the upstream default preset, which confines writes to the selected
-        # workspace; naming it here keeps that posture from moving with an inherited variable.
-        "DSH_PERMISSION_MODE": "workspace-write",
+        # `studio` is documented as a place to talk to the model, so a session opens unable to
+        # change anything rather than able to write across the directory bora happened to be
+        # launched from. The interface shows the preset and the user raises it per session, which
+        # is the shape every other destructive step here already has (D-097).
+        "DSH_PERMISSION_MODE": _PERMISSION_MODE,
     }
 
 

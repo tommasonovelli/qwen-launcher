@@ -204,10 +204,11 @@ managed service. The browser opens once the engine and the interface have each r
 model appears in its picker as `Qwen 3.6`, which is simply the alias the engine reports; bora writes
 nothing into the harness's own storage.
 
-The harness is an agent, not a plain chat window: a session runs against a workspace you pick, under
-a permission preset shown in the composer, and it can read and edit files there and run commands.
-The default preset confines writes to the selected workspace and the temporary directories; reads,
-network access, and process visibility are not confined. Choose the workspace deliberately.
+The harness is an agent, not a plain chat window: a session runs against a workspace you pick,
+under a permission preset shown in the composer. bora opens sessions **read-only**, so a new
+session cannot change your files and asks before acting; raise the preset in the composer when you
+want it to edit something. Reads, network access, and process visibility are not confined at any
+preset, so choose the workspace deliberately.
 
 If you installed with `--no-ui`, both modes open the integrated llama.cpp interface instead.
 `bora ui install` adds the harness later, and `bora ui remove` takes it back out — asking about the

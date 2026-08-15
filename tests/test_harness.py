@@ -108,7 +108,7 @@ def test_environment_carries_every_settled_value() -> None:
 
     assert environment["DSH_HOME"] == str(Path("/managed/home"))
     assert environment["DSH_TELEMETRY_DISABLED"] == "1"
-    assert environment["DSH_PERMISSION_MODE"] == "workspace-write"
+    assert environment["DSH_PERMISSION_MODE"] == "read-only"
     assert environment["BORA_LOCAL_KEY"]
 
 
@@ -182,6 +182,23 @@ def test_every_route_that_would_leave_this_machine_is_disabled() -> None:
 
     assert _row(rows, "llm-deepseek")["disabled"] is True
     assert _row(rows, "web-search-deepseek")["disabled"] is True
+
+
+def test_a_session_opens_unable_to_change_anything() -> None:
+    """Open on the preset that asks, not the one that may write the launch directory."""
+    assert launch_environment(_launch())["DSH_PERMISSION_MODE"] == "read-only"
+
+
+def test_the_extra_completion_per_turn_is_disabled_without_losing_titles() -> None:
+    """Keep the single calibrated slot for the stream the user is waiting on.
+
+    Only the model-backed titler is dropped. The row owning title state stays, so upstream still
+    names a session from its first prompt through its own fallback.
+    """
+    rows = overlay_rows(_launch())
+
+    assert _row(rows, "session-title-llm")["disabled"] is True
+    assert not [row for row in rows if row["id"] == "session-title"]
 
 
 def test_the_overlay_is_valid_json_so_it_needs_no_yaml_serializer() -> None:
